@@ -81,6 +81,8 @@
               <div class="stage-flare stage-flare--enemy" aria-hidden="true"></div>
               <div class="stage-flare stage-flare--player" aria-hidden="true"></div>
 
+              <div class="field-party field-party--enemy" id="enemy-field-party" hidden></div>
+
               <article class="combatant combatant--enemy" id="enemy-combatant">
                 <div class="combatant-card">
                   <div class="combatant-meta">
@@ -135,6 +137,8 @@
                   <div class="condition-row" id="player-conditions"></div>
                 </div>
               </article>
+
+              <div class="field-party field-party--player" id="player-field-party" hidden></div>
             </div>
 
             <div class="command-deck" id="command-deck">
@@ -207,7 +211,7 @@
         <div class="setup-copy">
           <span class="eyebrow">Demon summoning program</span>
           <h1 id="setup-title">Open a local contract</h1>
-          <p>Choose three demons. The first becomes your lead; order the rest as your reserve stock.</p>
+          <p id="setup-instructions">Choose three demons. The first becomes your lead; order the rest as your reserve stock.</p>
         </div>
 
         <div class="setup-section">

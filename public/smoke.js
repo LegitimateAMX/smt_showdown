@@ -5,6 +5,7 @@ import { DEFAULT_GAME_ID, getGame, listGames } from './games/registry.js';
 const checks = document.querySelector('#checks');
 const result = document.querySelector('#result');
 const GAME = getGame(DEFAULT_GAME_ID);
+const NOCTURNE_GAME = getGame('smt-iii-nocturne');
 let passed = 0;
 let failed = 0;
 
@@ -35,6 +36,14 @@ const makeBattle = (options = {}) => new BattleEngine({
   seed: options.seed || 'smoke-001',
 });
 
+const makeNocturneBattle = (options = {}) => new BattleEngine({
+  game: options.game || NOCTURNE_GAME,
+  playerTeam: options.playerTeam || ['pixie', 'jackFrost', 'oni'],
+  enemyTeam: options.enemyTeam || ['nekomata', 'huaPo', 'angel'],
+  opponentName: 'Press Turn test process',
+  seed: options.seed || 'press-turn-001',
+});
+
 test('registry exposes a validated immutable game profile', () => {
   assert(listGames().some((game) => game.id === DEFAULT_GAME_ID), 'default game should be registered');
   assert(Object.isFrozen(GAME), 'game definition should be immutable');
@@ -46,6 +55,220 @@ test('registry exposes the Nocturne profile shell', () => {
   assert(nocturne.name === 'Shin Megami Tensei III: Nocturne', 'Nocturne should use its full title');
   assert(nocturne.dataVersion === 0, 'Nocturne should remain marked as placeholder data');
   assert(Object.isFrozen(nocturne), 'Nocturne game definition should be immutable');
+});
+
+test('Nocturne starts with one full Press Turn icon per living ally', () => {
+  const battle = makeNocturneBattle();
+  assert(battle.state.pressTurns.player.full === 3, 'player should begin with three full icons');
+  assert(battle.state.pressTurns.player.half === 0, 'player should begin without half icons');
+  assert(NOCTURNE_GAME.presentation.partyMode === 'turn-order', 'Nocturne should render the full party field');
+  assert(NOCTURNE_GAME.presentation.manualTargeting, 'Nocturne should require manual single-target selection');
+});
+
+test('Nocturne single-target attacks hit the selected enemy without changing turn order', () => {
+  const battle = makeNocturneBattle();
+  battle.random = () => 0.5;
+  const firstHp = battle.state.teams.enemy[0].hp;
+  const secondHp = battle.state.teams.enemy[1].hp;
+  battle.act('player', { type: 'skill', skillId: 'zio', targetIndex: 1 });
+  assert(battle.state.teams.enemy[0].hp === firstHp, 'unselected enemy should not take damage');
+  assert(battle.state.teams.enemy[1].hp < secondHp, 'selected enemy should take damage');
+  assert(battle.state.active.enemy === 0, 'selecting a target should not change the enemy action cursor');
+});
+
+test('Nocturne single-target recovery can select an ally', () => {
+  const battle = makeNocturneBattle();
+  const pixieHp = battle.state.teams.player[0].hp;
+  const jackFrost = battle.state.teams.player[1];
+  jackFrost.hp -= 40;
+  const damagedHp = jackFrost.hp;
+  battle.random = () => 0.5;
+  battle.act('player', { type: 'skill', skillId: 'dia', targetIndex: 1 });
+  assert(jackFrost.hp > damagedHp, 'selected ally should recover HP');
+  assert(battle.state.teams.player[0].hp === pixieHp, 'the caster should not be healed instead');
+});
+
+test('Nocturne pass converts a full icon, then prioritizes an existing half icon', () => {
+  const battle = makeNocturneBattle();
+  battle.act('player', { type: 'pass' });
+  assert(battle.state.pressTurns.player.full === 2, 'first pass should convert one full icon');
+  assert(battle.state.pressTurns.player.half === 1, 'first pass should create one half icon');
+  assert(battle.active('player').id === 'jackFrost', 'passing should advance to the next ally');
+
+  battle.act('player', { type: 'pass' });
+  assert(battle.state.pressTurns.player.full === 2, 'second pass should preserve full icons');
+  assert(battle.state.pressTurns.player.half === 0, 'second pass should consume the existing half icon');
+  assert(battle.active('player').id === 'oni', 'the acting unit should advance again');
+});
+
+test('Nocturne weakness and critical hits create half icons', () => {
+  const weakness = makeNocturneBattle({ playerTeam: ['pixie', 'pixie', 'oni'] });
+  weakness.random = () => 0.5;
+  weakness.act('player', { type: 'skill', skillId: 'zio' });
+  weakness.act('player', { type: 'skill', skillId: 'zio' });
+  assert(weakness.state.pressTurns.player.full === 1, 'successive weakness hits should convert successive full icons');
+  assert(weakness.state.pressTurns.player.half === 2, 'successive weakness hits should preserve two half icons');
+
+  const critical = makeNocturneBattle();
+  critical.random = () => 0;
+  critical.act('player', { type: 'skill', skillId: 'attack' });
+  assert(critical.state.pressTurns.player.half === 1, 'a critical hit should create a half icon');
+});
+
+test('Nocturne miss and null outcomes spend two icons with half icons first', () => {
+  const miss = makeNocturneBattle();
+  miss.act('player', { type: 'pass' });
+  miss.random = () => 0.999;
+  miss.act('player', { type: 'skill', skillId: 'attack' });
+  assert(miss.state.pressTurns.player.full === 1, 'miss should spend one half and one full icon');
+  assert(miss.state.pressTurns.player.half === 0, 'miss should consume the available half icon first');
+
+  const nullified = makeNocturneBattle({ playerTeam: ['angel', 'pixie', 'oni'], enemyTeam: ['angel', 'huaPo', 'nekomata'] });
+  nullified.random = () => 0.5;
+  nullified.act('player', { type: 'skill', skillId: 'hama' });
+  assert(nullified.state.pressTurns.player.full === 1, 'nullification should spend two full icons');
+});
+
+test('Nocturne Drain immediately ends the acting side turn', () => {
+  const battle = makeNocturneBattle({
+    playerTeam: ['jackFrost', 'pixie', 'oni'],
+    enemyTeam: ['jackFrost', 'huaPo', 'nekomata'],
+  });
+  battle.random = () => 0.5;
+  battle.act('player', { type: 'skill', skillId: 'bufu' });
+  assert(battle.state.phase === 'enemy', 'Drain should immediately pass initiative to the enemy');
+  assert(battle.state.pressTurns.player.full === 0 && battle.state.pressTurns.player.half === 0, 'Drain should exhaust all player icons');
+});
+
+test('Nocturne multi-target attacks use the highest-priority icon outcome', () => {
+  const multiTargetGame = defineGame({
+    ...NOCTURNE_GAME,
+    id: 'nocturne-multi-target-test',
+    data: {
+      ...NOCTURNE_GAME.data,
+      skills: {
+        ...NOCTURNE_GAME.data.skills,
+        mabufu: { ...NOCTURNE_GAME.data.skills.mabufu, target: 'all' },
+      },
+    },
+  });
+  const battle = makeNocturneBattle({
+    game: multiTargetGame,
+    playerTeam: ['jackFrost', 'pixie', 'oni'],
+    enemyTeam: ['huaPo', 'jackFrost', 'nekomata'],
+  });
+  battle.random = () => 0.5;
+  battle.act('player', { type: 'skill', skillId: 'mabufu' });
+  assert(battle.state.phase === 'enemy', 'Drain should outrank a simultaneous weakness hit');
+  assert(battle.state.pressTurns.player.full === 0 && battle.state.pressTurns.player.half === 0, 'highest-priority Drain result should exhaust all icons');
+});
+
+test('Nocturne random multi-hit spells roll once, distribute hits, and pay once', () => {
+  const multiHitGame = defineGame({
+    ...NOCTURNE_GAME,
+    id: 'nocturne-random-multi-hit-test',
+    data: {
+      ...NOCTURNE_GAME.data,
+      skills: {
+        ...NOCTURNE_GAME.data.skills,
+        zio: {
+          ...NOCTURNE_GAME.data.skills.zio,
+          target: 'random',
+          hits: { min: 5, max: 5 },
+          accuracy: 100,
+          crit: 0,
+        },
+      },
+    },
+  });
+  const battle = makeNocturneBattle({ game: multiHitGame });
+  const caster = battle.active('player');
+  const startingMp = caster.mp;
+  battle.random = () => 0;
+  const result = battle.act('player', { type: 'skill', skillId: 'zio' });
+  const hits = result.events.filter((event) => event.type === 'damage');
+
+  assert(hits.length === 5, 'five-hit spell should resolve five separate damage events');
+  assert(hits.map((event) => event.targetIndex).join(',') === '0,0,0,1,1', 'random distribution should cap a target at three hits in a group');
+  assert(hits.every((event, index) => event.hitNumber === index + 1 && event.hitCount === 5), 'each event should identify its place in the hit sequence');
+  assert(battle.state.teams.enemy[2].hp === battle.state.teams.enemy[2].stats.maxHp, 'an enemy receiving no assigned hits should be untouched');
+  assert(caster.mp === startingMp - multiHitGame.data.skills.zio.cost, 'the skill cost should be paid only once');
+  assert(battle.state.pressTurns.player.half === 1, 'a weakness on any hit should produce one half icon for the whole cast');
+});
+
+test('Nocturne random multi-hit spells cap repeats against a lone target', () => {
+  const multiHitGame = defineGame({
+    ...NOCTURNE_GAME,
+    id: 'nocturne-lone-target-multi-hit-test',
+    data: {
+      ...NOCTURNE_GAME.data,
+      skills: {
+        ...NOCTURNE_GAME.data.skills,
+        zio: {
+          ...NOCTURNE_GAME.data.skills.zio,
+          target: 'random',
+          hits: { min: 5, max: 5 },
+          accuracy: 100,
+          crit: 0,
+        },
+      },
+    },
+  });
+  const battle = makeNocturneBattle({ game: multiHitGame, enemyTeam: ['nekomata'] });
+  battle.random = () => 0;
+  const result = battle.act('player', { type: 'skill', skillId: 'zio' });
+  assert(result.events.filter((event) => event.type === 'damage').length === 2, 'a lone target should receive at most two random hits');
+});
+
+test('Nocturne random multi-hit spells honor their variable hit range', () => {
+  const multiHitGame = defineGame({
+    ...NOCTURNE_GAME,
+    id: 'nocturne-variable-multi-hit-test',
+    data: {
+      ...NOCTURNE_GAME.data,
+      skills: {
+        ...NOCTURNE_GAME.data.skills,
+        zio: {
+          ...NOCTURNE_GAME.data.skills.zio,
+          target: 'random',
+          hits: { min: 2, max: 5, maxPerTarget: 5 },
+          accuracy: 100,
+          crit: 0,
+        },
+      },
+    },
+  });
+  const minimum = makeNocturneBattle({ game: multiHitGame, enemyTeam: ['nekomata'] });
+  minimum.random = () => 0;
+  const minimumResult = minimum.act('player', { type: 'skill', skillId: 'zio' });
+  assert(minimumResult.events.filter((event) => event.type === 'damage').length === 2, 'minimum roll should use hits.min');
+
+  const maximum = makeNocturneBattle({ game: multiHitGame, enemyTeam: ['nekomata'] });
+  let randomCalls = 0;
+  maximum.random = () => (randomCalls++ === 0 ? 0.999 : 0);
+  const maximumResult = maximum.act('player', { type: 'skill', skillId: 'zio' });
+  assert(maximumResult.events.filter((event) => event.type === 'damage').length === 5, 'maximum roll should use hits.max');
+});
+
+test('Nocturne rejects incomplete random multi-hit skill metadata', () => {
+  let error = null;
+  try {
+    defineGame({
+      ...NOCTURNE_GAME,
+      id: 'nocturne-invalid-multi-hit-test',
+      data: {
+        ...NOCTURNE_GAME.data,
+        skills: {
+          ...NOCTURNE_GAME.data.skills,
+          zio: { ...NOCTURNE_GAME.data.skills.zio, target: 'random' },
+        },
+      },
+    });
+  } catch (caught) {
+    error = caught;
+  }
+  assert(error instanceof GameDataError, 'invalid random-target skill should fail game validation');
+  assert(error.issues.some((issue) => issue.includes('hits.min')), 'validation should identify the missing hit range');
 });
 
 test('definition validation rejects broken content references', () => {

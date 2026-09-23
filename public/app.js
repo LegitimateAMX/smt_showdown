@@ -8,6 +8,7 @@ const delay = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
 const ui = {
   setupModal: $('#setup-modal'),
   setupRoster: $('#setup-roster'),
+  setupInstructions: $('#setup-instructions'),
   selectionCounter: $('#selection-counter'),
   gameProfile: $('#game-profile'),
   opponentPreset: $('#opponent-preset'),
@@ -31,6 +32,7 @@ let RULES_PROFILE = activeGame.config;
 let selectedTeam = [...activeGame.data.defaultPlayerTeam];
 let engine = null;
 let activeCommandTab = 'skills';
+let pendingAction = null;
 let interactionLocked = false;
 let compendiumFilter = 'All';
 let soundEnabled = false;
@@ -62,6 +64,7 @@ function setup() {
   renderCompendiumFilters();
   renderCompendium();
   renderRulesPage();
+  configureProfileUi();
   bindEvents();
   renderEmptyBattle();
   if (new URLSearchParams(window.location.search).has('demo')) startBattle();
@@ -74,6 +77,7 @@ function renderOpponentOptions() {
 }
 
 function activateGame(gameId) {
+  pendingAction = null;
   activeGame = getGame(gameId);
   ELEMENTS = activeGame.elements;
   AFFINITIES = activeGame.affinities;
@@ -89,7 +93,26 @@ function activateGame(gameId) {
   renderCompendiumFilters();
   renderCompendium();
   renderRulesPage();
+  configureProfileUi();
   $('#field-protocol').textContent = activeGame.presentation.fieldProtocol;
+}
+
+function availableCommandTabs() {
+  return activeGame.presentation.commandTabs || ['skills', 'switch', 'inspect'];
+}
+
+function configureProfileUi() {
+  const availableTabs = availableCommandTabs();
+  if (!availableTabs.includes(activeCommandTab)) activeCommandTab = availableTabs[0];
+  $$('.command-tab').forEach((tab) => {
+    const available = availableTabs.includes(tab.dataset.commandTab);
+    const active = available && tab.dataset.commandTab === activeCommandTab;
+    tab.hidden = !available;
+    tab.classList.toggle('is-active', active);
+    tab.setAttribute('aria-selected', String(active));
+  });
+  ui.setupInstructions.textContent = activeGame.presentation.setupInstructions
+    || 'Choose three demons. The first becomes your lead; order the rest as your reserve stock.';
 }
 
 function renderSetupRoster() {
@@ -140,6 +163,7 @@ function bindEvents() {
 
   $$('.command-tab').forEach((button) => {
     button.addEventListener('click', () => {
+      pendingAction = null;
       activeCommandTab = button.dataset.commandTab;
       $$('.command-tab').forEach((tab) => {
         const active = tab === button;
@@ -151,17 +175,28 @@ function bindEvents() {
   });
 
   ui.commandContent.addEventListener('click', (event) => {
+    const targetButton = event.target.closest('[data-target-side][data-target-index]');
+    const cancelTarget = event.target.closest('[data-action="cancel-target"]');
     const skillButton = event.target.closest('[data-skill-id]');
     const switchButton = event.target.closest('[data-switch-index]');
-    if (skillButton) issuePlayerAction({ type: 'skill', skillId: skillButton.dataset.skillId });
+    if (targetButton) choosePendingTarget(targetButton.dataset.targetSide, Number(targetButton.dataset.targetIndex));
+    if (cancelTarget) cancelTargetSelection();
+    if (skillButton) selectPlayerSkill(skillButton.dataset.skillId);
     if (switchButton) issuePlayerAction({ type: 'switch', index: Number(switchButton.dataset.switchIndex) });
     if (event.target.closest('[data-action="guard"]')) issuePlayerAction({ type: 'guard' });
+    if (event.target.closest('[data-action="pass"]')) issuePlayerAction({ type: 'pass' });
     if (event.target.closest('[data-action="rematch"]')) startBattle();
     if (event.target.closest('[data-action="new-team"]')) openSetup();
   });
 
+  ui.battleStage.addEventListener('click', (event) => {
+    const target = event.target.closest('[data-field-side][data-field-index]');
+    if (!target || !target.classList.contains('is-targetable')) return;
+    choosePendingTarget(target.dataset.fieldSide, Number(target.dataset.fieldIndex));
+  });
+
   $('#player-party-list').addEventListener('click', (event) => {
-    if (!event.target.closest('.party-member')) return;
+    if (!event.target.closest('.party-member') || !availableCommandTabs().includes('switch')) return;
     activeCommandTab = 'switch';
     $$('.command-tab').forEach((tab) => {
       const active = tab.dataset.commandTab === 'switch';
@@ -191,11 +226,15 @@ function bindEvents() {
 
   document.addEventListener('keydown', (event) => {
     if (event.target.matches('input, select, textarea')) return;
+    if (event.key === 'Escape' && pendingAction) {
+      cancelTargetSelection();
+      return;
+    }
     const number = Number(event.key);
     if (!engine || number < 1 || number > 4 || interactionLocked || engine.state.phase !== 'player') return;
     const actor = engine.active('player');
     const skillId = actor.skills[number - 1];
-    if (skillId) issuePlayerAction({ type: 'skill', skillId });
+    if (skillId) selectPlayerSkill(skillId);
   });
 }
 
@@ -207,6 +246,7 @@ function navigate(viewName) {
 }
 
 function openSetup() {
+  pendingAction = null;
   ui.setupModal.classList.add('is-open');
   ui.setupModal.removeAttribute('aria-hidden');
   renderSetupRoster();
@@ -223,12 +263,9 @@ function startBattle() {
     opponentName: opponent.name,
   });
   interactionLocked = false;
+  pendingAction = null;
   activeCommandTab = 'skills';
-  $$('.command-tab').forEach((tab) => {
-    const active = tab.dataset.commandTab === 'skills';
-    tab.classList.toggle('is-active', active);
-    tab.setAttribute('aria-selected', String(active));
-  });
+  configureProfileUi();
   ui.setupModal.classList.remove('is-open');
   ui.setupModal.setAttribute('aria-hidden', 'true');
   navigate('battle');
@@ -261,8 +298,18 @@ function renderBattle() {
   $('#round-number').textContent = String(state.round).padStart(2, '0');
   $('#player-party-count').textContent = `${engine.living('player').length} / ${state.teams.player.length}`;
 
-  renderCombatant('player', player);
-  renderCombatant('enemy', enemy);
+  const usesPartyField = activeGame.presentation.partyMode === 'turn-order';
+  $('#player-combatant').hidden = usesPartyField;
+  $('#enemy-combatant').hidden = usesPartyField;
+  $('#player-field-party').hidden = !usesPartyField;
+  $('#enemy-field-party').hidden = !usesPartyField;
+  if (usesPartyField) {
+    renderFieldParty('player');
+    renderFieldParty('enemy');
+  } else {
+    renderCombatant('player', player);
+    renderCombatant('enemy', enemy);
+  }
   renderParty();
   renderTurnBanner();
   renderCommands();
@@ -286,6 +333,38 @@ function renderCombatant(side, combatant) {
   $(`#${side}-conditions`).innerHTML = renderConditions(combatant);
 }
 
+function renderFieldParty(side) {
+  const state = engine.state;
+  const targetSide = pendingAction?.targetSide;
+  const fieldParty = $(`#${side}-field-party`);
+  fieldParty.style.setProperty('--party-size', state.teams[side].length);
+  fieldParty.innerHTML = state.teams[side].map((combatant, index) => {
+    const acting = state.phase === side && state.active[side] === index && !combatant.fainted;
+    const targetable = targetSide === side && !combatant.fainted && !interactionLocked;
+    const status = combatant.fainted ? 'Down' : acting ? 'Acting' : targetable ? 'Select target' : 'Ready';
+    return `
+      <button
+        class="field-unit${acting ? ' is-acting' : ''}${targetable ? ' is-targetable' : ''}${combatant.fainted ? ' is-fainted' : ''}"
+        id="${side}-field-unit-${index}"
+        data-field-side="${side}"
+        data-field-index="${index}"
+        type="button"
+        aria-label="${escapeHtml(combatant.name)}: ${status}"
+        ${targetable ? '' : 'tabindex="-1"'}
+      >
+        <span class="field-unit__summon" style="--demon-primary:${combatant.palette[0]};--demon-secondary:${combatant.palette[1]}">
+          <span class="field-unit__glyph">${combatant.glyph}</span>
+        </span>
+        <span class="field-unit__card">
+          <span class="field-unit__heading"><strong>${escapeHtml(combatant.name)}</strong><small>Lv. ${combatant.level}</small></span>
+          <span class="field-unit__status">${status}</span>
+          <span class="field-unit__resource"><small>HP</small><i><b style="width:${hpPercent(combatant)}%"></b></i><em>${combatant.hp}/${combatant.stats.maxHp}</em></span>
+          ${side === 'player' ? `<span class="field-unit__resource field-unit__resource--mp"><small>MP</small><i><b style="width:${mpPercent(combatant)}%"></b></i><em>${combatant.mp}/${combatant.stats.maxMp}</em></span>` : ''}
+        </span>
+      </button>`;
+  }).join('');
+}
+
 function renderConditions(combatant) {
   const chips = [];
   if (combatant.guarding) chips.push('<span class="condition condition--guard">Guard</span>');
@@ -298,13 +377,15 @@ function renderConditions(combatant) {
 
 function renderParty() {
   const state = engine.state;
+  const usesTurnOrder = activeGame.presentation.partyMode === 'turn-order';
   $('#player-party-list').innerHTML = state.teams.player.map((member, index) => {
     const active = state.active.player === index;
+    const stateLabel = member.fainted ? 'Down' : usesTurnOrder ? active ? 'Acting' : 'Ready' : active ? 'Active' : 'Reserve';
     return `
       <button class="party-member${active ? ' is-active' : ''}${member.fainted ? ' is-fainted' : ''}" type="button" ${member.fainted ? 'disabled' : ''}>
         <span class="mini-sigil" style="--c1:${member.palette[0]};--c2:${member.palette[1]}">${member.glyph}</span>
         <span class="party-member__body">
-          <span><strong>${escapeHtml(member.name)}</strong><small>${active ? 'Active' : member.fainted ? 'Down' : 'Reserve'}</small></span>
+          <span><strong>${escapeHtml(member.name)}</strong><small>${stateLabel}</small></span>
           <span class="mini-meter"><i style="width:${hpPercent(member)}%"></i></span>
           <span class="party-hp">${member.hp} / ${member.stats.maxHp}</span>
         </span>
@@ -323,6 +404,27 @@ function renderTurnBanner() {
     eyebrow.textContent = 'Simulation complete';
     prompt.textContent = state.winner === 'player' ? 'Contract fulfilled' : 'Stock exhausted';
     turns.innerHTML = '<span class="turn-orb is-spent"></span>';
+    return;
+  }
+
+  if (state.pressTurns) {
+    const side = state.phase;
+    const icons = state.pressTurns[side];
+    const enemyClass = side === 'enemy' ? ' turn-orb--enemy' : '';
+    const fullIcons = Array.from({ length: icons.full }, () => (
+      `<span class="turn-orb is-active${enemyClass}" title="Full Press Turn"></span>`
+    ));
+    const halfIcons = Array.from({ length: icons.half }, () => (
+      `<span class="turn-orb turn-orb--half is-active${enemyClass}" title="Half Press Turn"></span>`
+    ));
+    const remaining = icons.full + icons.half;
+    eyebrow.textContent = side === 'player' ? 'Your Press Turn' : 'Rival Press Turn';
+    const selectedSkill = pendingAction ? SKILLS[pendingAction.skillId] : null;
+    prompt.textContent = side === 'player'
+      ? selectedSkill ? `Select a target for ${selectedSkill.name}` : `What will ${engine.active('player').name} do?`
+      : `${engine.active('enemy').name} is calculating...`;
+    turns.setAttribute('aria-label', `${remaining} Press Turn ${remaining === 1 ? 'icon' : 'icons'} remaining`);
+    turns.innerHTML = [...halfIcons, ...fullIcons].join('');
     return;
   }
 
@@ -363,6 +465,11 @@ function renderCommands() {
     return;
   }
 
+  if (pendingAction && state.phase === 'player') {
+    ui.commandContent.innerHTML = renderTargetSelection();
+    return;
+  }
+
   if (activeCommandTab === 'skills') {
     ui.commandContent.innerHTML = `
       <div class="skill-grid${disabled ? ' is-disabled' : ''}">
@@ -380,6 +487,12 @@ function renderCommands() {
           <span><strong>Guard</strong><small>Halve incoming damage until your next action</small></span>
           <span class="skill-cost">No cost</span>
         </button>
+        ${activeGame.presentation.allowPass ? `
+          <button class="guard-button" data-action="pass" type="button" ${disabled ? 'disabled' : ''}>
+            <span class="skill-icon element-support">&#9655;</span>
+            <span><strong>Pass</strong><small>Move to the next ally using half a turn</small></span>
+            <span class="skill-cost">Half turn</span>
+          </button>` : ''}
       </div>`;
   } else if (activeCommandTab === 'switch') {
     ui.commandContent.innerHTML = `
@@ -396,7 +509,9 @@ function renderSkillButton(actor, skill, index, disabled) {
   const payable = engine.canPay(actor, skill);
   const element = ELEMENTS[skill.element];
   const target = engine.active('enemy');
-  const affinity = skill.kind === 'damage' ? engine.affinityFor(target, skill.element) : null;
+  const affinity = skill.kind === 'damage' && !activeGame.presentation.manualTargeting
+    ? engine.affinityFor(target, skill.element)
+    : null;
   const affinityTag = affinity && affinity !== 'normal' ? `<span class="affinity-hint affinity-${affinity}">${AFFINITIES[affinity].label}</span>` : '';
   return `
     <button class="skill-button" data-skill-id="${skill.id}" type="button" ${disabled || !payable ? 'disabled' : ''} style="--element:${element.color}">
@@ -408,6 +523,72 @@ function renderSkillButton(actor, skill, index, disabled) {
       </span>
       <span class="skill-cost${!payable ? ' is-insufficient' : ''}">${skill.cost || '—'} ${skill.cost ? skill.costType.toUpperCase() : ''}</span>
     </button>`;
+}
+
+function targetSideForSkill(skill) {
+  if (skill.targetSide === 'self' || skill.targetSide === 'ally') return 'player';
+  if (skill.targetSide === 'enemy') return 'enemy';
+  return skill.kind === 'heal' || skill.kind === 'buff' ? 'player' : 'enemy';
+}
+
+function skillNeedsTarget(skill) {
+  return activeGame.presentation.manualTargeting
+    && !['all', 'random', 'self'].includes(skill.target);
+}
+
+function selectPlayerSkill(skillId) {
+  if (!engine || interactionLocked || engine.state.phase !== 'player' || engine.state.winner) return;
+  const actor = engine.active('player');
+  const skill = SKILLS[skillId];
+  if (!skill || (!actor.skills.includes(skill.id) && skill.id !== 'attack')) return;
+  if (!engine.canPay(actor, skill)) {
+    showToast(`Not enough ${skill.costType.toUpperCase()}.`);
+    return;
+  }
+  if (!skillNeedsTarget(skill)) {
+    issuePlayerAction({ type: 'skill', skillId });
+    return;
+  }
+
+  pendingAction = { type: 'skill', skillId, targetSide: targetSideForSkill(skill) };
+  renderBattle();
+}
+
+function choosePendingTarget(side, index) {
+  if (!pendingAction || pendingAction.targetSide !== side || interactionLocked) return;
+  const target = engine.state.teams[side]?.[index];
+  if (!target || target.fainted) return;
+  issuePlayerAction({ ...pendingAction, targetIndex: index });
+}
+
+function cancelTargetSelection() {
+  if (!pendingAction || interactionLocked) return;
+  pendingAction = null;
+  renderBattle();
+}
+
+function renderTargetSelection() {
+  const skill = SKILLS[pendingAction.skillId];
+  const targets = engine.state.teams[pendingAction.targetSide];
+  return `
+    <div class="target-selection">
+      <div class="target-selection__heading">
+        <div><span class="eyebrow">Choose target</span><strong>${escapeHtml(skill.name)}</strong></div>
+        <button class="text-button" data-action="cancel-target" type="button">Cancel</button>
+      </div>
+      <div class="target-selection__grid">
+        ${targets.map((target, index) => {
+          const affinity = skill.kind === 'damage' ? engine.affinityFor(target, skill.element) : null;
+          const affinityLabel = affinity ? AFFINITIES[affinity].label : `${target.hp} / ${target.stats.maxHp} HP`;
+          return `
+            <button class="target-option" data-target-side="${pendingAction.targetSide}" data-target-index="${index}" type="button" ${target.fainted ? 'disabled' : ''}>
+              <span class="mini-sigil" style="--c1:${target.palette[0]};--c2:${target.palette[1]}">${target.glyph}</span>
+              <span><strong>${escapeHtml(target.name)}</strong><small>${escapeHtml(affinityLabel)}</small></span>
+            </button>`;
+        }).join('')}
+      </div>
+      <p class="command-note">Select a highlighted combatant on the field or choose one here.</p>
+    </div>`;
 }
 
 function renderSwitchButton(member, index, disabled) {
@@ -476,6 +657,7 @@ async function issuePlayerAction(action) {
     return;
   }
 
+  pendingAction = null;
   renderBattle();
   await animateEvents(result.events);
   if (engine.state.winner) {
@@ -500,11 +682,15 @@ async function animateEvents(events) {
   const notable = events.filter((event) => event.impact).slice(-3);
   for (const event of notable) {
     const target = event.targetSide || event.side;
-    const combatant = target ? $(`#${target}-combatant`) : null;
+    const combatant = target
+      ? activeGame.presentation.partyMode === 'turn-order'
+        ? $(`#${target}-field-unit-${event.targetIndex ?? engine.state.active[target]}`)
+        : $(`#${target}-combatant`)
+      : null;
     ui.impactBanner.textContent = event.impact;
     ui.impactBanner.className = `impact-banner is-visible impact-banner--${event.tone || 'system'}`;
     if (combatant && ['damage', 'repel', 'status', 'faint'].includes(event.type)) combatant.classList.add('is-hit');
-    if (event.type === 'heal' || event.type === 'stage') $(`#${event.side}-combatant`)?.classList.add('is-boosted');
+    if (event.type === 'heal' || event.type === 'stage') combatant?.classList.add('is-boosted');
     playTone(event.tone || event.type);
     await delay(330);
     combatant?.classList.remove('is-hit');
