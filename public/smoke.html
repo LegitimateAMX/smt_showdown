@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SMT Showdown — Engine smoke tests</title>
+    <style>
+      :root { color-scheme: dark; font-family: ui-monospace, Consolas, monospace; }
+      body { max-width: 780px; margin: 50px auto; padding: 0 20px; color: #eee; background: #090a0e; }
+      h1 { font: 400 32px Georgia, serif; }
+      p { color: #9b9eaa; line-height: 1.6; }
+      ol { padding: 0; border: 1px solid #2b2e38; list-style: none; }
+      li { padding: 12px 14px; border-bottom: 1px solid #2b2e38; font-size: 12px; }
+      li:last-child { border: 0; }
+      .pass { border-left: 3px solid #73f7ba; color: #bff8da; }
+      .fail { border-left: 3px solid #ff5d63; color: #ffb2b5; }
+      #result { margin-top: 18px; font-weight: 700; }
+      a { color: #c5a4ff; }
+    </style>
+  </head>
+  <body>
+    <span>PROTOCOL DIAGNOSTICS</span>
+    <h1>Engine smoke tests</h1>
+    <p>This page exercises the framework-free rules module directly in the browser.</p>
+    <ol id="checks"></ol>
+    <p id="result">Running…</p>
+    <p><a href="./">Return to simulator</a></p>
+    <script type="module" src="./smoke.js"></script>
+  </body>
+</html>

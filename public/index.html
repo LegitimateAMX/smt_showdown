@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0a0b10" />
+    <meta
+      name="description"
+      content="A local, data-driven Shin Megami Tensei battle simulator prototype."
+    />
+    <title>SMT Showdown — Local Battle Prototype</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="noise" aria-hidden="true"></div>
+
+    <header class="topbar">
+      <a class="brand" href="#battle" aria-label="SMT Showdown home">
+        <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+        <span class="brand-copy">
+          <strong>SMT <em>SHOWDOWN</em></strong>
+          <small>Local battle protocol</small>
+        </span>
+      </a>
+
+      <nav class="main-nav" aria-label="Main navigation">
+        <button class="nav-item is-active" data-view="battle" type="button">
+          <span class="nav-icon" aria-hidden="true">✦</span> Battle
+        </button>
+        <button class="nav-item" data-view="compendium" type="button">
+          <span class="nav-icon" aria-hidden="true">⌘</span> Compendium
+        </button>
+        <button class="nav-item" data-view="rules" type="button">
+          <span class="nav-icon" aria-hidden="true">◇</span> Rules
+        </button>
+      </nav>
+
+      <div class="topbar-status">
+        <span class="status-dot"></span>
+        <span>Local</span>
+        <button class="icon-button" id="audio-toggle" type="button" aria-label="Toggle interface sounds" aria-pressed="false">♪</button>
+      </div>
+    </header>
+
+    <main>
+      <section id="battle-view" class="view view--battle is-active" aria-label="Battle simulator">
+        <div class="battle-grid">
+          <aside class="party-panel panel">
+            <div class="panel-heading">
+              <div>
+                <span class="eyebrow">Your stock</span>
+                <h2>Summoned party</h2>
+              </div>
+              <span class="party-count" id="player-party-count">3 / 3</span>
+            </div>
+            <div class="party-list" id="player-party-list"></div>
+            <div class="tactical-card">
+              <span class="tactical-card__icon" aria-hidden="true">◎</span>
+              <div>
+                <strong>Field protocol</strong>
+                <p id="field-protocol">Exploit affinities to earn one bonus action.</p>
+              </div>
+            </div>
+          </aside>
+
+          <section class="arena-panel panel">
+            <div class="arena-topline">
+              <div class="match-id">
+                <span class="eyebrow">Simulation</span>
+                <strong id="match-label">Awaiting contract</strong>
+              </div>
+              <div class="round-readout">
+                <span>Round</span>
+                <strong id="round-number">—</strong>
+              </div>
+              <button class="small-button" id="new-match-button" type="button">New match</button>
+            </div>
+
+            <div class="battle-stage" id="battle-stage">
+              <div class="stage-grid" aria-hidden="true"></div>
+              <div class="stage-flare stage-flare--enemy" aria-hidden="true"></div>
+              <div class="stage-flare stage-flare--player" aria-hidden="true"></div>
+
+              <article class="combatant combatant--enemy" id="enemy-combatant">
+                <div class="combatant-card">
+                  <div class="combatant-meta">
+                    <div>
+                      <span class="combatant-owner">Rival program</span>
+                      <h3 id="enemy-name">Unknown</h3>
+                    </div>
+                    <span class="level-chip" id="enemy-level">Lv. —</span>
+                  </div>
+                  <div class="resource-row">
+                    <span>HP</span>
+                    <div class="meter meter--hp"><i id="enemy-hp-bar"></i></div>
+                    <strong id="enemy-hp-value">— / —</strong>
+                  </div>
+                  <div class="condition-row" id="enemy-conditions"></div>
+                </div>
+                <div class="summon summon--enemy" id="enemy-summon" aria-hidden="true">
+                  <div class="summon-aura"></div>
+                  <div class="summon-ring"></div>
+                  <div class="summon-glyph" id="enemy-glyph">?</div>
+                  <span class="summon-shadow"></span>
+                </div>
+              </article>
+
+              <div class="impact-banner" id="impact-banner" aria-live="assertive"></div>
+
+              <article class="combatant combatant--player" id="player-combatant">
+                <div class="summon summon--player" id="player-summon" aria-hidden="true">
+                  <div class="summon-aura"></div>
+                  <div class="summon-ring"></div>
+                  <div class="summon-glyph" id="player-glyph">?</div>
+                  <span class="summon-shadow"></span>
+                </div>
+                <div class="combatant-card">
+                  <div class="combatant-meta">
+                    <div>
+                      <span class="combatant-owner">Your active demon</span>
+                      <h3 id="player-name">Unknown</h3>
+                    </div>
+                    <span class="level-chip" id="player-level">Lv. —</span>
+                  </div>
+                  <div class="resource-row">
+                    <span>HP</span>
+                    <div class="meter meter--hp"><i id="player-hp-bar"></i></div>
+                    <strong id="player-hp-value">— / —</strong>
+                  </div>
+                  <div class="resource-row">
+                    <span>MP</span>
+                    <div class="meter meter--mp"><i id="player-mp-bar"></i></div>
+                    <strong id="player-mp-value">— / —</strong>
+                  </div>
+                  <div class="condition-row" id="player-conditions"></div>
+                </div>
+              </article>
+            </div>
+
+            <div class="command-deck" id="command-deck">
+              <div class="turn-banner">
+                <div>
+                  <span class="eyebrow" id="turn-eyebrow">Contract inactive</span>
+                  <h2 id="turn-prompt">Begin a match to issue commands</h2>
+                </div>
+                <div class="press-turns" id="press-turns" aria-label="Available actions"></div>
+              </div>
+
+              <div class="command-tabs" role="tablist" aria-label="Battle commands">
+                <button class="command-tab is-active" data-command-tab="skills" role="tab" aria-selected="true" type="button">Skills</button>
+                <button class="command-tab" data-command-tab="switch" role="tab" aria-selected="false" type="button">Switch</button>
+                <button class="command-tab" data-command-tab="inspect" role="tab" aria-selected="false" type="button">Analyze</button>
+              </div>
+              <div class="command-content" id="command-content"></div>
+            </div>
+          </section>
+
+          <aside class="log-panel panel">
+            <div class="panel-heading">
+              <div>
+                <span class="eyebrow">Live feed</span>
+                <h2>Battle log</h2>
+              </div>
+              <button class="text-button" id="copy-log" type="button">Copy</button>
+            </div>
+            <ol class="battle-log" id="battle-log" aria-live="polite"></ol>
+            <div class="log-footer">
+              <span class="status-dot"></span>
+              <span id="log-status">System ready</span>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <section id="compendium-view" class="view page-view" aria-label="Demon compendium">
+        <div class="page-header">
+          <div>
+            <span class="eyebrow">Local database</span>
+            <h1>Demon Compendium</h1>
+            <p>Starter entries are demonstration data. Every value is isolated for easy replacement.</p>
+          </div>
+          <label class="search-field">
+            <span aria-hidden="true">⌕</span>
+            <input id="compendium-search" type="search" placeholder="Search name, race, or skill…" />
+          </label>
+        </div>
+        <div class="filter-row" id="compendium-filters"></div>
+        <div class="compendium-grid" id="compendium-grid"></div>
+      </section>
+
+      <section id="rules-view" class="view page-view" aria-label="Selected game rules">
+        <div class="page-header">
+          <div>
+            <span class="eyebrow" id="rules-profile-label">Rules profile</span>
+            <h1 id="rules-title">Battle Protocol</h1>
+            <p id="rules-description">Loading the selected game profile…</p>
+          </div>
+        </div>
+        <div class="rules-layout" id="rules-layout"></div>
+        <div class="affinity-legend" id="affinity-legend"></div>
+      </section>
+    </main>
+
+    <div class="modal-backdrop is-open" id="setup-modal" role="dialog" aria-modal="true" aria-labelledby="setup-title">
+      <div class="setup-modal">
+        <div class="modal-decoration" aria-hidden="true"><i></i><i></i><i></i></div>
+        <div class="setup-copy">
+          <span class="eyebrow">Demon summoning program</span>
+          <h1 id="setup-title">Open a local contract</h1>
+          <p>Choose three demons. The first becomes your lead; order the rest as your reserve stock.</p>
+        </div>
+
+        <div class="setup-section">
+          <div class="setup-section__heading">
+            <h2>Your lineup</h2>
+            <span id="selection-counter">0 / 3 selected</span>
+          </div>
+          <div class="setup-roster" id="setup-roster"></div>
+        </div>
+
+        <div class="setup-options">
+          <label>
+            <span>Game / ruleset</span>
+            <select id="game-profile"></select>
+          </label>
+          <label>
+            <span>Opponent</span>
+            <select id="opponent-preset"></select>
+          </label>
+          <label>
+            <span>Battle seed</span>
+            <div class="seed-field">
+              <input id="battle-seed" type="text" maxlength="24" autocomplete="off" />
+              <button id="reroll-seed" type="button" aria-label="Generate a new seed">↻</button>
+            </div>
+          </label>
+        </div>
+
+        <button class="primary-button" id="start-battle" type="button" disabled>
+          <span>Initialize battle</span>
+          <span aria-hidden="true">→</span>
+        </button>
+        <p class="keyboard-hint">Tip: press <kbd>1</kbd>–<kbd>4</kbd> to use skills during battle.</p>
+      </div>
+    </div>
+
+    <div class="toast-region" id="toast-region" aria-live="polite"></div>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

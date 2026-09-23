@@ -1,0 +1,14 @@
+{
+  "name": "smt-showdown",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A local, data-driven Shin Megami Tensei battle simulator prototype.",
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "start:powershell": "powershell -NoProfile -ExecutionPolicy Bypass -File ./Start-Showdown.ps1 -Open"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
