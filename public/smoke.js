@@ -28,6 +28,12 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
+function assertNear(actual, expected, message) {
+  if (Math.abs(actual - expected) > 0.000001) {
+    throw new Error(`${message}: expected ${expected}, received ${actual}`);
+  }
+}
+
 const makeBattle = (options = {}) => new BattleEngine({
   game: GAME,
   playerTeam: options.playerTeam || ['pixie', 'jackFrost', 'oni'],
@@ -54,6 +60,8 @@ test('registry exposes the Nocturne profile shell', () => {
   const nocturne = getGame('smt-iii-nocturne');
   assert(nocturne.name === 'Shin Megami Tensei III: Nocturne', 'Nocturne should use its full title');
   assert(nocturne.dataVersion === 0, 'Nocturne should remain marked as placeholder data');
+  assert(nocturne.config.maxTeamSize === 4, 'Nocturne should allow four player units');
+  assert(nocturne.data.defaultPlayerTeam.length === 4, 'Nocturne should start with a four-unit player lineup');
   assert(Object.isFrozen(nocturne), 'Nocturne game definition should be immutable');
 });
 
@@ -63,6 +71,196 @@ test('Nocturne starts with one full Press Turn icon per living ally', () => {
   assert(battle.state.pressTurns.player.half === 0, 'player should begin without half icons');
   assert(NOCTURNE_GAME.presentation.partyMode === 'turn-order', 'Nocturne should render the full party field');
   assert(NOCTURNE_GAME.presentation.manualTargeting, 'Nocturne should require manual single-target selection');
+});
+
+test('Nocturne selects and calculates all four damage formula classes', () => {
+  const battle = makeNocturneBattle();
+  const actor = battle.state.teams.player[0];
+  const basic = NOCTURNE_GAME.data.skills.attack;
+  const physical = NOCTURNE_GAME.data.skills.lunge;
+  const weapon = { id: 'testWeapon', power: 69.6, damageFormula: 'weapon' };
+  const magic = { id: 'testMagic', power: 21, complement: 10, limit: 80, damageFormula: 'magic' };
+
+  assert(battle.rules.damageFormulaFor(basic) === 'basic', 'Attack should use the basic formula');
+  assert(battle.rules.damageFormulaFor(physical) === 'physical', 'Physical skills should use the physical formula');
+  assertNear(battle.rules.baseDamageFor('player', actor, basic), (7 + 16) * 2 * 1.33 * 0.8, 'basic damage');
+  assertNear(battle.rules.baseDamageFor('player', actor, physical), ((7 + 16) * 2 * 58 / 23.2) * 0.8, 'physical damage');
+  assertNear(battle.rules.baseDamageFor('player', actor, weapon), 126 * 0.8, 'party weapon damage');
+  assertNear(battle.rules.baseDamageFor('enemy', actor, weapon), (7 + 17) * 6 * 0.8, 'enemy weapon damage');
+
+  const effectiveLimit = 10 + 7 * 21 * 2 / 21;
+  const expectedMagic = (
+    effectiveLimit
+    + effectiveLimit / 100 * (27 - (7 / 5 + 4)) * 2.5
+  ) * 0.8;
+  assertNear(battle.rules.baseDamageFor('player', actor, magic), expectedMagic, 'magic damage');
+  assertNear(
+    battle.rules.baseDamageFor('player', actor, { ...magic, limit: 20 }),
+    (20 + 20 / 100 * (27 - (7 / 5 + 4)) * 2.5) * 0.8,
+    'magic damage should respect its skill limit',
+  );
+
+  const highLevelActor = { ...actor, level: 200, stats: { ...actor.stats, magic: 80 } };
+  assertNear(
+    battle.rules.baseDamageFor('player', highLevelActor, { ...magic, limit: 100 }),
+    (100 + 100 / 100 * (80 - (160 / 5 + 4)) * 2.5) * 0.8,
+    'magic damage should treat levels above 160 as level 160',
+  );
+
+  battle.random = () => 0;
+  assertNear(battle.rules.damageVarianceFor('physical'), 0.95, 'physical minimum variance');
+  assertNear(battle.rules.damageVarianceFor('magic'), 0.9, 'magic minimum variance');
+  battle.random = () => 1;
+  assertNear(battle.rules.damageVarianceFor('physical'), 1.05, 'physical maximum variance');
+  assertNear(battle.rules.damageVarianceFor('magic'), 1.1, 'magic maximum variance');
+});
+
+test('Nocturne compendium records use the level-ready demon schema', () => {
+  assert(NOCTURNE_GAME.config.maxSkills === 8, 'Nocturne should expose eight usable skill slots');
+  const cappedStats = ['strength', 'magic', 'vitality', 'agility', 'luck'];
+  Object.entries(NOCTURNE_GAME.data.demons).forEach(([id, demon]) => {
+    assert(demon.id === id, `${id} should expose its registry id`);
+    assert(Boolean(demon.name && demon.race && demon.glyph), `${id} should expose identity fields`);
+    assert(Number.isInteger(demon.baseLevel), `${id} should expose a base level`);
+    assert(Array.isArray(demon.palette) && demon.palette.length >= 2, `${id} should expose a palette`);
+    assert(Number.isInteger(demon.baseStats.hp) && Number.isInteger(demon.baseStats.mp), `${id} should expose base HP and MP`);
+    cappedStats.forEach((stat) => {
+      assert(demon.baseStats[stat] <= 40, `${id} ${stat} should not exceed 40`);
+    });
+    assert(demon.affinities && typeof demon.affinities === 'object', `${id} should expose affinities`);
+    assert(Array.isArray(demon.innateSkills), `${id} should expose innate skills`);
+    assert(Array.isArray(demon.futureSkills), `${id} should expose future skills`);
+    assert(!('stats' in demon) && !('skills' in demon) && !('level' in demon), `${id} should not use the prototype demon schema`);
+  });
+});
+
+test('Nocturne clamps selected levels and unlocks future skills at their learn level', () => {
+  const leveledGame = defineGame({
+    ...NOCTURNE_GAME,
+    id: 'nocturne-level-test',
+    data: {
+      ...NOCTURNE_GAME.data,
+      demons: {
+        ...NOCTURNE_GAME.data.demons,
+        pixie: {
+          ...NOCTURNE_GAME.data.demons.pixie,
+          futureSkills: [{ skillId: 'agi', level: 8 }],
+        },
+      },
+    },
+  });
+  const battle = makeNocturneBattle({
+    game: leveledGame,
+    playerTeam: [
+      { id: 'pixie', level: 255 },
+      { id: 'jackFrost', level: 1 },
+      { id: 'oni', level: 15 },
+    ],
+  });
+  assert(battle.state.teams.player[0].level === 255, 'level 255 should be selectable');
+  assert(battle.state.teams.player[0].skills.includes('agi'), 'future skills should unlock at or above their learn level');
+  assert(battle.state.teams.player[1].level === 12, 'levels below base level should clamp to the demon base level');
+  assert(['strength', 'magic', 'vitality', 'agility', 'luck'].every(
+    (stat) => battle.state.teams.player.every((demon) => demon.stats[stat] <= 40),
+  ), 'battle stats should retain the Nocturne stat cap');
+
+  const beforeLearnLevel = makeNocturneBattle({
+    game: leveledGame,
+    playerTeam: [{ id: 'pixie', level: 7 }, 'jackFrost', 'oni'],
+  });
+  assert(!beforeLearnLevel.state.teams.player[0].skills.includes('agi'), 'future skills should remain locked below their learn level');
+});
+
+test('Nocturne enforces selected eight-skill loadouts against the level skill pool', () => {
+  const loadoutGame = defineGame({
+    ...NOCTURNE_GAME,
+    id: 'nocturne-loadout-test',
+    data: {
+      ...NOCTURNE_GAME.data,
+      demons: {
+        ...NOCTURNE_GAME.data.demons,
+        pixie: {
+          ...NOCTURNE_GAME.data.demons.pixie,
+          futureSkills: [
+            { skillId: 'agi', level: 8 },
+            { skillId: 'bufu', level: 8 },
+            { skillId: 'mabufu', level: 8 },
+            { skillId: 'zan', level: 8 },
+            { skillId: 'hama', level: 8 },
+            { skillId: 'mudo', level: 8 },
+            { skillId: 'megido', level: 8 },
+          ],
+        },
+      },
+    },
+  });
+  const battle = makeNocturneBattle({
+    game: loadoutGame,
+    playerTeam: [{
+      id: 'pixie',
+      level: 255,
+      skills: ['zio', 'agi', 'bufu', 'mabufu', 'zan', 'hama', 'mudo', 'megido', 'dia'],
+    }, 'jackFrost', 'oni'],
+  });
+  assert(battle.state.teams.player[0].skills.length === 8, 'a supplied loadout should be capped at eight skills');
+  assert(!battle.state.teams.player[0].skills.includes('dia'), 'skills after the eighth valid selection should be omitted');
+  assert(!battle.state.teams.player[0].skills.includes('attack'), 'the standard Attack command should not consume a skill slot');
+
+  const restricted = makeNocturneBattle({
+    game: loadoutGame,
+    playerTeam: [{ id: 'pixie', level: 7, skills: ['zio', 'agi', 'attack'] }, 'jackFrost', 'oni'],
+  });
+  assert(restricted.state.teams.player[0].skills.length === 1, 'locked and universal commands should be removed from selected skills');
+  assert(restricted.state.teams.player[0].skills[0] === 'zio', 'an available selected skill should remain equipped');
+});
+
+test('Nocturne always provides Attack and Pass outside the eight skill slots', () => {
+  assert(NOCTURNE_GAME.config.maxSkills + 2 === 10, 'eight skills plus Attack and Pass should provide ten maximum actions');
+  assert(NOCTURNE_GAME.presentation.allowPass, 'Pass should be exposed by the Nocturne profile');
+  assert(NOCTURNE_GAME.presentation.allowGuard === false, 'Guard should not add an eleventh Nocturne action');
+
+  const attackBattle = makeNocturneBattle({
+    playerTeam: [{ id: 'pixie', level: 7, skills: [] }, 'jackFrost', 'oni'],
+  });
+  attackBattle.random = () => 0.5;
+  const attack = attackBattle.act('player', { type: 'skill', skillId: 'attack', targetIndex: 0 });
+  assert(attack.ok, 'Attack should remain usable with an empty equipped-skill loadout');
+
+  const passBattle = makeNocturneBattle({
+    playerTeam: [{ id: 'pixie', level: 7, skills: [] }, 'jackFrost', 'oni'],
+  });
+  const pass = passBattle.act('player', { type: 'pass' });
+  assert(pass.ok, 'Pass should remain usable with an empty equipped-skill loadout');
+
+  const guardBattle = makeNocturneBattle();
+  const eventCount = guardBattle.state.events.length;
+  const guard = guardBattle.act('player', { type: 'guard' });
+  assert(!guard.ok, 'Guard should be rejected by the Nocturne ruleset');
+  assert(guardBattle.state.events.length === eventCount, 'a rejected Guard command should not change battle state');
+});
+
+test('Nocturne rejects base attributes above the hard cap', () => {
+  let error = null;
+  try {
+    defineGame({
+      ...NOCTURNE_GAME,
+      id: 'nocturne-invalid-stat-test',
+      data: {
+        ...NOCTURNE_GAME.data,
+        demons: {
+          ...NOCTURNE_GAME.data.demons,
+          pixie: {
+            ...NOCTURNE_GAME.data.demons.pixie,
+            baseStats: { ...NOCTURNE_GAME.data.demons.pixie.baseStats, strength: 41 },
+          },
+        },
+      },
+    });
+  } catch (caught) {
+    error = caught;
+  }
+  assert(error instanceof GameDataError, 'an attribute above 40 should reject the profile');
+  assert(error.issues.some((issue) => issue.includes('base strength from 0 to 40')), 'the stat-cap error should identify the invalid attribute');
 });
 
 test('Nocturne single-target attacks hit the selected enemy without changing turn order', () => {

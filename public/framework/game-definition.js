@@ -29,10 +29,20 @@ function validateReferences(definition, issues) {
 
   Object.entries(demons).forEach(([key, demon]) => {
     if (demon.id !== key) issues.push(`Demon key "${key}" does not match its id "${demon.id}".`);
-    if (!Array.isArray(demon.skills)) issues.push(`Demon "${key}" must have a skills array.`);
-    else demon.skills.forEach((skillId) => {
+    const innateSkills = Array.isArray(demon.innateSkills) ? demon.innateSkills : demon.skills;
+    if (!Array.isArray(innateSkills)) issues.push(`Demon "${key}" must have a skills or innateSkills array.`);
+    else innateSkills.forEach((skillId) => {
       if (!skills[skillId]) issues.push(`Demon "${key}" references missing skill "${skillId}".`);
     });
+    if (demon.futureSkills !== undefined && !Array.isArray(demon.futureSkills)) {
+      issues.push(`Demon "${key}" must have a futureSkills array when provided.`);
+    } else {
+      demon.futureSkills?.forEach((entry) => {
+        if (!isRecord(entry) || !skills[entry.skillId]) {
+          issues.push(`Demon "${key}" has a future skill with an invalid skillId.`);
+        }
+      });
+    }
   });
 
   Object.entries(skills).forEach(([key, skill]) => {

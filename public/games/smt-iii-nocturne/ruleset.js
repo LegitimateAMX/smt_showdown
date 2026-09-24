@@ -11,9 +11,8 @@ const PRESS_OUTCOME_PRIORITY = {
 };
 
 /**
- * Nocturne's Press Turn action economy layered over the temporary prototype
- * combat data and formulas. Title-specific formulas can replace the inherited
- * behavior later without changing this turn-icon state model.
+ * Nocturne's Press Turn action economy and title-specific damage formulas,
+ * currently operating on temporary prototype combatant and skill data.
  */
 export class NocturneRuleset extends PrototypeRuleset {
   createInitialState(options) {
@@ -29,6 +28,64 @@ export class NocturneRuleset extends PrototypeRuleset {
     return state.teams[side].filter((member) => !member.fainted);
   }
 
+  makeCombatant(selection) {
+    const id = typeof selection === 'string' ? selection : selection?.id;
+    const source = this.game.data.demons[id];
+    if (!source) throw new Error(`Unknown demon "${id}" in game "${this.game.id}".`);
+
+    const requestedLevel = Number(typeof selection === 'string' ? source.baseLevel : selection.level);
+    const level = clamp(
+      Number.isInteger(requestedLevel) ? requestedLevel : source.baseLevel,
+      source.baseLevel,
+      this.config.maxLevel,
+    );
+    const cappedStat = (stat) => clamp(source.baseStats[stat], 0, this.config.statCap);
+    const stats = {
+      maxHp: source.baseStats.hp,
+      maxMp: source.baseStats.mp,
+      strength: cappedStat('strength'),
+      magic: cappedStat('magic'),
+      vitality: cappedStat('vitality'),
+      agility: cappedStat('agility'),
+      luck: cappedStat('luck'),
+    };
+    const usableSkills = this.usableSkillPoolFor(source, level);
+    const requestedSkills = typeof selection === 'object' && Array.isArray(selection.skills)
+      ? selection.skills
+      : usableSkills;
+    const skills = [...new Set(requestedSkills)]
+      .filter((skillId) => usableSkills.includes(skillId))
+      .slice(0, this.config.maxSkills);
+
+    return {
+      id: source.id,
+      name: source.name,
+      race: source.race,
+      level,
+      glyph: source.glyph,
+      palette: [...source.palette],
+      stats,
+      affinities: { ...source.affinities },
+      skills,
+      hp: stats.maxHp,
+      mp: stats.maxMp,
+      stages: { attack: 0, defense: 0, agility: 0 },
+      ailment: null,
+      guarding: false,
+      fainted: false,
+    };
+  }
+
+  usableSkillPoolFor(demon, level) {
+    const learnedSkills = demon.futureSkills
+      .filter((entry) => entry.level <= level)
+      .map((entry) => entry.skillId);
+    // The standard Attack command is universal and does not occupy one of a
+    // demon's eight usable skill slots.
+    return [...new Set([...demon.innateSkills, ...learnedSkills])]
+      .filter((skillId) => skillId !== 'attack');
+  }
+
   onBattleStart() {
     const icons = this.remainingIcons('player');
     this.addEvent('system', `Contract established. Game: ${this.game.name}. Seed: ${this.engine.seed}.`, { tone: 'system' });
@@ -39,6 +96,7 @@ export class NocturneRuleset extends PrototypeRuleset {
   act(side, action) {
     if (this.state.winner) return { ok: false, error: 'This battle has ended.', events: [] };
     if (this.state.phase !== side) return { ok: false, error: "It is not that side's turn.", events: [] };
+    if (action.type === 'guard') return { ok: false, error: 'Guard is not available in Nocturne.', events: [] };
 
     const eventStart = this.state.events.length;
     const actor = this.active(side);
@@ -85,13 +143,6 @@ export class NocturneRuleset extends PrototypeRuleset {
       if (skill.kind === 'ailment') this.resolveAilment(side, actor, target, skill);
       this.applyEndActionAilments(actor, side);
       this.finishAction(side, outcome);
-    } else if (action.type === 'guard') {
-      actor.guarding = true;
-      this.addEvent('guard', `${actor.name} braces for the next attack.`, {
-        side, targetSide: side, targetIndex: actorIndex, tone: 'positive', impact: 'GUARD',
-      });
-      this.applyEndActionAilments(actor, side);
-      this.finishAction(side, 'normal');
     } else if (action.type === 'pass') {
       actor.guarding = false;
       this.addEvent('pass', `${actor.name} passed the turn.`, {
@@ -273,18 +324,20 @@ export class NocturneRuleset extends PrototypeRuleset {
     }
 
     const affinity = this.affinityFor(target, skill.element);
-    const offenseStat = skill.element === 'physical' || skill.element === 'gun' ? 'attack' : 'magic';
-    const offense = actor.stats[offenseStat] * (offenseStat === 'attack' ? this.stageMultiplier(actor.stages.attack) : 1);
-    const defense = target.stats.defense * this.stageMultiplier(target.stages.defense);
-    const variance = 0.9 + this.engine.random() * 0.16;
-    let damage = (skill.power * (offense + 20)) / (defense + 35) + actor.level * 0.35;
+    const damageFormula = this.damageFormulaFor(skill);
+    const variance = this.damageVarianceFor(damageFormula);
+    let damage = this.baseDamageFor(side, actor, skill);
     let critical = false;
 
-    if (skill.crit && this.engine.random() * 100 < skill.crit) {
+    damage *= this.stageMultiplier(actor.stages.attack);
+    damage /= this.stageMultiplier(target.stages.defense);
+    if (damageFormula !== 'magic' && skill.crit && this.engine.random() * 100 < skill.crit) {
       critical = true;
       damage *= this.config.criticalDamage;
     }
-    damage *= this.affinities[affinity].multiplier;
+    if (!['null', 'repel', 'drain'].includes(affinity)) {
+      damage *= this.affinities[affinity].multiplier;
+    }
     if (target.guarding) damage *= this.config.guardDamage;
     damage = Math.max(1, Math.round(damage * variance));
 
@@ -354,6 +407,51 @@ export class NocturneRuleset extends PrototypeRuleset {
 
     this.checkFaint(targetSide, side, target);
     return affinity === 'weak' || critical ? 'bonus' : 'normal';
+  }
+
+  damageFormulaFor(skill) {
+    if (['basic', 'physical', 'weapon', 'magic'].includes(skill.damageFormula)) {
+      return skill.damageFormula;
+    }
+    if (skill.id === 'attack') return 'basic';
+    if (skill.element === 'physical' || skill.element === 'gun') return 'physical';
+    return 'magic';
+  }
+
+  damageVarianceFor(formula) {
+    return formula === 'magic'
+      ? 0.9 + this.engine.random() * 0.2
+      : 0.95 + this.engine.random() * 0.1;
+  }
+
+  baseDamageFor(side, actor, skill) {
+    const formula = this.damageFormulaFor(skill);
+    const level = actor.level;
+    const strength = actor.stats.strength ?? actor.stats.attack;
+
+    if (formula === 'basic') {
+      return (level + strength) * 2 * 1.33 * 0.8;
+    }
+    if (formula === 'physical') {
+      return ((level + strength) * 2 * skill.power / 23.2) * 0.8;
+    }
+    if (formula === 'weapon') {
+      const vitality = actor.stats.vitality ?? actor.stats.defense;
+      const maximumHp = side === 'player'
+        ? actor.stats.maxHp
+        : Math.min((level + vitality) * 6, 999);
+      return (maximumHp / 69.6) * skill.power * 0.8;
+    }
+
+    const complement = Number.isFinite(skill.complement) ? skill.complement : 0;
+    const limit = Number.isFinite(skill.limit) ? skill.limit : Number.POSITIVE_INFINITY;
+    const effectiveLimit = Math.min(complement + level * skill.power * 2 / 21, limit);
+    const damageLevel = Math.min(level, 160);
+    const magic = actor.stats.magic;
+    return (
+      effectiveLimit
+      + effectiveLimit / 100 * (magic - (damageLevel / 5 + 4)) * 2.5
+    ) * 0.8;
   }
 
   checkFaint(side, victorSide, combatant = this.active(side)) {

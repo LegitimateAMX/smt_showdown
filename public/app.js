@@ -8,6 +8,7 @@ const delay = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
 const ui = {
   setupModal: $('#setup-modal'),
   setupRoster: $('#setup-roster'),
+  setupSkills: $('#setup-skills'),
   setupInstructions: $('#setup-instructions'),
   selectionCounter: $('#selection-counter'),
   gameProfile: $('#game-profile'),
@@ -30,6 +31,8 @@ let PLAYER_ROSTER = activeGame.data.playerRoster;
 let OPPONENT_PRESETS = activeGame.data.opponentPresets;
 let RULES_PROFILE = activeGame.config;
 let selectedTeam = [...activeGame.data.defaultPlayerTeam];
+let selectedLevels = createLevelSelections(activeGame);
+let selectedSkillLoadouts = createSkillSelections(activeGame, selectedLevels);
 let engine = null;
 let activeCommandTab = 'skills';
 let pendingAction = null;
@@ -37,6 +40,74 @@ let interactionLocked = false;
 let compendiumFilter = 'All';
 let soundEnabled = false;
 let audioContext = null;
+
+function demonBaseLevel(demon) {
+  return demon.baseLevel ?? demon.level;
+}
+
+function demonBaseStats(demon) {
+  if (demon.baseStats) return demon.baseStats;
+  return {
+    hp: demon.stats.maxHp,
+    mp: demon.stats.maxMp,
+    attack: demon.stats.attack,
+    magic: demon.stats.magic,
+    defense: demon.stats.defense,
+    agility: demon.stats.agility,
+    luck: demon.stats.luck,
+  };
+}
+
+function demonInnateSkills(demon) {
+  return demon.innateSkills || demon.skills;
+}
+
+function demonFutureSkills(demon) {
+  return demon.futureSkills || [];
+}
+
+function demonSkillIds(demon) {
+  return [...new Set([
+    ...demonInnateSkills(demon),
+    ...demonFutureSkills(demon).map((entry) => entry.skillId),
+  ])];
+}
+
+function selectableSkillOptions(demon) {
+  const options = new Map();
+  demonInnateSkills(demon).forEach((skillId) => {
+    if (skillId !== 'attack') options.set(skillId, { skillId, level: demonBaseLevel(demon), innate: true });
+  });
+  demonFutureSkills(demon).forEach(({ skillId, level }) => {
+    if (skillId !== 'attack' && !options.has(skillId)) options.set(skillId, { skillId, level, innate: false });
+  });
+  return [...options.values()];
+}
+
+function usableSkillIds(demon, level) {
+  return selectableSkillOptions(demon)
+    .filter((entry) => entry.level <= level)
+    .map((entry) => entry.skillId);
+}
+
+function createLevelSelections(game) {
+  return Object.fromEntries(game.data.playerRoster.map((id) => [id, demonBaseLevel(game.data.demons[id])]));
+}
+
+function createSkillSelections(game, levels) {
+  const maximum = game.config.maxSkills || Number.POSITIVE_INFINITY;
+  return Object.fromEntries(game.data.playerRoster.map((id) => [
+    id,
+    usableSkillIds(game.data.demons[id], levels[id]).slice(0, maximum),
+  ]));
+}
+
+function normalizedSelectedLevel(id, value = selectedLevels[id]) {
+  const baseLevel = demonBaseLevel(DEMONS[id]);
+  const maximum = RULES_PROFILE.maxLevel || baseLevel;
+  const numericLevel = Number(value);
+  return Math.max(baseLevel, Math.min(maximum, Number.isInteger(numericLevel) ? numericLevel : baseLevel));
+}
 
 function escapeHtml(value) {
   return String(value)
@@ -87,6 +158,8 @@ function activateGame(gameId) {
   OPPONENT_PRESETS = activeGame.data.opponentPresets;
   RULES_PROFILE = activeGame.config;
   selectedTeam = [...activeGame.data.defaultPlayerTeam];
+  selectedLevels = createLevelSelections(activeGame);
+  selectedSkillLoadouts = createSkillSelections(activeGame, selectedLevels);
   compendiumFilter = 'All';
   renderOpponentOptions();
   renderSetupRoster();
@@ -120,21 +193,87 @@ function renderSetupRoster() {
     const demon = DEMONS[id];
     const selectedIndex = selectedTeam.indexOf(id);
     const isSelected = selectedIndex >= 0;
+    const baseLevel = demonBaseLevel(demon);
+    const innateSkills = demonInnateSkills(demon);
+    const levelControl = activeGame.presentation.levelSelection ? `
+      <label class="roster-card__level">
+        <span>Battle level</span>
+        <input
+          data-roster-level="${id}"
+          type="number"
+          min="${baseLevel}"
+          max="${RULES_PROFILE.maxLevel}"
+          value="${normalizedSelectedLevel(id)}"
+          aria-label="${escapeHtml(demon.name)} battle level"
+          ${isSelected ? '' : 'disabled'}
+        />
+      </label>` : '';
     return `
-      <button class="roster-card${isSelected ? ' is-selected' : ''}" data-roster-id="${id}" type="button" aria-pressed="${isSelected}">
-        <span class="mini-sigil" style="--c1:${demon.palette[0]};--c2:${demon.palette[1]}">${demon.glyph}</span>
-        <span class="roster-card__copy">
-          <small>${escapeHtml(demon.race)} · Lv. ${demon.level}</small>
-          <strong>${escapeHtml(demon.name)}</strong>
-          <span>${demon.skills.slice(0, 2).map((skillId) => SKILLS[skillId].name).join(' · ')}</span>
-        </span>
-        <span class="selection-order">${isSelected ? selectedIndex + 1 : '+'}</span>
-      </button>
+      <article class="roster-card${isSelected ? ' is-selected' : ''}">
+        <button class="roster-card__select" data-roster-id="${id}" type="button" aria-pressed="${isSelected}">
+          <span class="mini-sigil" style="--c1:${demon.palette[0]};--c2:${demon.palette[1]}">${demon.glyph}</span>
+          <span class="roster-card__copy">
+            <small>${escapeHtml(demon.race)} · ${activeGame.presentation.levelSelection ? 'Base ' : ''}Lv. ${baseLevel}</small>
+            <strong>${escapeHtml(demon.name)}</strong>
+            <span>${innateSkills.slice(0, 2).map((skillId) => SKILLS[skillId].name).join(' · ')}</span>
+          </span>
+          <span class="selection-order">${isSelected ? selectedIndex + 1 : '+'}</span>
+        </button>
+        ${levelControl}
+      </article>
     `;
   }).join('');
 
   ui.selectionCounter.textContent = `${selectedTeam.length} / ${RULES_PROFILE.maxTeamSize} selected`;
   ui.startBattle.disabled = selectedTeam.length !== RULES_PROFILE.maxTeamSize;
+  renderSetupSkillLoadouts();
+}
+
+function renderSetupSkillLoadouts() {
+  if (!activeGame.presentation.skillSelection) {
+    ui.setupSkills.hidden = true;
+    ui.setupSkills.innerHTML = '';
+    return;
+  }
+
+  ui.setupSkills.hidden = false;
+  ui.setupSkills.innerHTML = selectedTeam.map((id) => {
+    const demon = DEMONS[id];
+    const level = normalizedSelectedLevel(id);
+    const options = selectableSkillOptions(demon);
+    const selected = selectedSkillLoadouts[id] || [];
+    const atCapacity = selected.length >= RULES_PROFILE.maxSkills;
+    return `
+      <section class="loadout-card">
+        <div class="loadout-card__heading">
+          <span class="mini-sigil" style="--c1:${demon.palette[0]};--c2:${demon.palette[1]}">${demon.glyph}</span>
+          <span><strong>${escapeHtml(demon.name)}</strong><small>Lv. ${level}</small></span>
+          <em>${selected.length} / ${RULES_PROFILE.maxSkills}</em>
+        </div>
+        <div class="loadout-skills">
+          ${options.length ? options.map(({ skillId, level: learnLevel, innate }) => {
+            const skill = SKILLS[skillId];
+            const available = learnLevel <= level;
+            const isSelected = selected.includes(skillId);
+            return `
+              <button
+                class="loadout-skill${isSelected ? ' is-selected' : ''}${available ? '' : ' is-locked'}"
+                data-loadout-demon="${id}"
+                data-loadout-skill="${skillId}"
+                type="button"
+                aria-pressed="${isSelected}"
+                style="--skill-color:${ELEMENTS[skill.element].color}"
+                ${!available || (atCapacity && !isSelected) ? 'disabled' : ''}
+              >
+                <span>${ELEMENTS[skill.element].icon}</span>
+                <strong>${escapeHtml(skill.name)}</strong>
+                <small>${innate ? 'Innate' : `Lv. ${learnLevel}`}</small>
+              </button>`;
+          }).join('') : '<p class="loadout-empty">Only the standard Attack command is currently available.</p>'}
+        </div>
+        <p class="loadout-card__fixed">Attack + Pass are always available outside these slots.</p>
+      </section>`;
+  }).join('');
 }
 
 function bindEvents() {
@@ -148,6 +287,34 @@ function bindEvents() {
     else if (selectedTeam.length < RULES_PROFILE.maxTeamSize) selectedTeam.push(id);
     else showToast('Your stock is full. Remove a demon before adding another.');
     renderSetupRoster();
+  });
+
+  ui.setupRoster.addEventListener('change', (event) => {
+    const input = event.target.closest('[data-roster-level]');
+    if (!input) return;
+    const id = input.dataset.rosterLevel;
+    const previousAvailable = new Set(usableSkillIds(DEMONS[id], selectedLevels[id]));
+    selectedLevels[id] = normalizedSelectedLevel(id, input.value);
+    const available = usableSkillIds(DEMONS[id], selectedLevels[id]);
+    const retained = (selectedSkillLoadouts[id] || []).filter((skillId) => available.includes(skillId));
+    const newlyUnlocked = available.filter((skillId) => !previousAvailable.has(skillId));
+    selectedSkillLoadouts[id] = [...new Set([...retained, ...newlyUnlocked])].slice(0, RULES_PROFILE.maxSkills);
+    input.value = selectedLevels[id];
+    renderSetupSkillLoadouts();
+  });
+
+  ui.setupSkills.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-loadout-demon][data-loadout-skill]');
+    if (!button || button.disabled) return;
+    const id = button.dataset.loadoutDemon;
+    const skillId = button.dataset.loadoutSkill;
+    const selected = selectedSkillLoadouts[id] || [];
+    if (selected.includes(skillId)) {
+      selectedSkillLoadouts[id] = selected.filter((entry) => entry !== skillId);
+    } else if (selected.length < RULES_PROFILE.maxSkills) {
+      selectedSkillLoadouts[id] = [...selected, skillId];
+    }
+    renderSetupSkillLoadouts();
   });
 
   $('#reroll-seed').addEventListener('click', () => {
@@ -255,9 +422,16 @@ function openSetup() {
 
 function startBattle() {
   const opponent = OPPONENT_PRESETS.find((preset) => preset.id === ui.opponentPreset.value) || OPPONENT_PRESETS[0];
+  const playerTeam = activeGame.presentation.levelSelection
+    ? selectedTeam.map((id) => ({
+      id,
+      level: normalizedSelectedLevel(id),
+      skills: [...(selectedSkillLoadouts[id] || [])],
+    }))
+    : selectedTeam;
   engine = new BattleEngine({
     game: activeGame,
-    playerTeam: selectedTeam,
+    playerTeam,
     enemyTeam: opponent.team,
     seed: ui.battleSeed.value.trim() || makeSeed(),
     opponentName: opponent.name,
@@ -482,11 +656,12 @@ function renderCommands() {
             <span><strong>Attack</strong><small>Basic physical strike</small></span>
             <span class="skill-cost">No cost</span>
           </button>`}
-        <button class="guard-button" data-action="guard" type="button" ${disabled ? 'disabled' : ''}>
-          <span class="skill-icon element-support">◇</span>
-          <span><strong>Guard</strong><small>Halve incoming damage until your next action</small></span>
-          <span class="skill-cost">No cost</span>
-        </button>
+        ${activeGame.presentation.allowGuard === false ? '' : `
+          <button class="guard-button" data-action="guard" type="button" ${disabled ? 'disabled' : ''}>
+            <span class="skill-icon element-support">◇</span>
+            <span><strong>Guard</strong><small>Halve incoming damage until your next action</small></span>
+            <span class="skill-cost">No cost</span>
+          </button>`}
         ${activeGame.presentation.allowPass ? `
           <button class="guard-button" data-action="pass" type="button" ${disabled ? 'disabled' : ''}>
             <span class="skill-icon element-support">&#9655;</span>
@@ -610,12 +785,13 @@ function renderAnalysis() {
   const enemy = engine.active('enemy');
   const excludedElements = activeGame.presentation.excludedAnalysisElements || [];
   const combatElements = Object.keys(ELEMENTS).filter((key) => !excludedElements.includes(key));
+  const analysisStats = activeGame.presentation.analysisStats || ['attack', 'magic', 'defense', 'agility', 'luck'];
   return `
     <div class="analysis-grid">
       <div class="analysis-unit">
         <span class="eyebrow">Active comparison</span>
         <div class="stat-compare">
-          ${['attack', 'magic', 'defense', 'agility', 'luck'].map((stat) => `
+          ${analysisStats.map((stat) => `
             <div><span>${stat.slice(0, 3).toUpperCase()}</span><strong>${player.stats[stat]}</strong><i></i><strong>${enemy.stats[stat]}</strong></div>
           `).join('')}
         </div>
@@ -711,33 +887,47 @@ function renderCompendium() {
   const query = ($('#compendium-search')?.value || '').trim().toLowerCase();
   const demons = Object.values(DEMONS).filter((demon) => {
     const matchesFilter = compendiumFilter === 'All' || demon.race === compendiumFilter;
-    const searchable = `${demon.name} ${demon.race} ${demon.skills.map((id) => SKILLS[id].name).join(' ')}`.toLowerCase();
+    const searchable = `${demon.name} ${demon.race} ${demonSkillIds(demon).map((id) => SKILLS[id].name).join(' ')}`.toLowerCase();
     return matchesFilter && searchable.includes(query);
   });
 
-  $('#compendium-grid').innerHTML = demons.length ? demons.map((demon) => `
-    <article class="compendium-card">
-      <div class="compendium-card__visual" style="--c1:${demon.palette[0]};--c2:${demon.palette[1]}">
-        <span>${demon.glyph}</span>
-        <small>No. ${String(Object.keys(DEMONS).indexOf(demon.id) + 1).padStart(3, '0')}</small>
-      </div>
-      <div class="compendium-card__body">
-        <div class="compendium-title">
-          <div><small>${escapeHtml(demon.race)}</small><h2>${escapeHtml(demon.name)}</h2></div>
-          <span>Lv. ${demon.level}</span>
+  const statDefinitions = activeGame.presentation.compendiumStats || [
+    { key: 'attack', label: 'ATK', cap: 37 },
+    { key: 'magic', label: 'MAG', cap: 37 },
+    { key: 'defense', label: 'DEF', cap: 37 },
+    { key: 'agility', label: 'AGI', cap: 37 },
+    { key: 'luck', label: 'LUC', cap: 37 },
+  ];
+
+  $('#compendium-grid').innerHTML = demons.length ? demons.map((demon) => {
+    const baseStats = demonBaseStats(demon);
+    const innateSkills = demonInnateSkills(demon);
+    const futureSkills = demonFutureSkills(demon);
+    return `
+      <article class="compendium-card">
+        <div class="compendium-card__visual" style="--c1:${demon.palette[0]};--c2:${demon.palette[1]}">
+          <span>${demon.glyph}</span>
+          <small>No. ${String(Object.keys(DEMONS).indexOf(demon.id) + 1).padStart(3, '0')}</small>
         </div>
-        <p>${escapeHtml(demon.blurb)}</p>
-        <div class="stat-pips">
-          ${['attack', 'magic', 'defense', 'agility', 'luck'].map((stat) => `
-            <div><span>${stat.slice(0, 3)}</span><i><b style="width:${Math.min(100, demon.stats[stat] * 2.7)}%"></b></i><strong>${demon.stats[stat]}</strong></div>
-          `).join('')}
+        <div class="compendium-card__body">
+          <div class="compendium-title">
+            <div><small>${escapeHtml(demon.race)}</small><h2>${escapeHtml(demon.name)}</h2></div>
+            <span>${activeGame.presentation.levelSelection ? 'Base ' : ''}Lv. ${demonBaseLevel(demon)}</span>
+          </div>
+          <p>${escapeHtml(demon.blurb || 'Compendium details pending.')}</p>
+          <div class="compendium-resources"><span>HP <strong>${baseStats.hp}</strong></span><span>MP <strong>${baseStats.mp}</strong></span></div>
+          <div class="stat-pips">
+            ${statDefinitions.map(({ key, label, cap }) => `
+              <div><span>${label}</span><i><b style="width:${Math.min(100, baseStats[key] / cap * 100)}%"></b></i><strong>${baseStats[key]}</strong></div>
+            `).join('')}
+          </div>
+          <div class="skill-tags">
+            ${innateSkills.map((id) => `<span style="--tag-color:${ELEMENTS[SKILLS[id].element].color}">${ELEMENTS[SKILLS[id].element].icon} ${escapeHtml(SKILLS[id].name)}</span>`).join('')}
+            ${futureSkills.map(({ skillId, level }) => `<span class="is-future" style="--tag-color:${ELEMENTS[SKILLS[skillId].element].color}">${ELEMENTS[SKILLS[skillId].element].icon} ${escapeHtml(SKILLS[skillId].name)} · Lv. ${level}</span>`).join('')}
+          </div>
         </div>
-        <div class="skill-tags">
-          ${demon.skills.map((id) => `<span style="--tag-color:${ELEMENTS[SKILLS[id].element].color}">${ELEMENTS[SKILLS[id].element].icon} ${escapeHtml(SKILLS[id].name)}</span>`).join('')}
-        </div>
-      </div>
-    </article>
-  `).join('') : '<div class="empty-results"><span>⌕</span><h2>No entries found</h2><p>Try another race or search term.</p></div>';
+      </article>`;
+  }).join('') : '<div class="empty-results"><span>⌕</span><h2>No entries found</h2><p>Try another race or search term.</p></div>';
 }
 
 function renderRulesPage() {
