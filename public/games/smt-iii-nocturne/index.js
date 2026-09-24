@@ -1,6 +1,12 @@
 import { defineGame } from '../../framework/game-definition.js';
 import { PROTOTYPE_GAME } from '../prototype-00/index.js';
+import {
+  NOCTURNE_AFFINITIES,
+  NOCTURNE_DAMAGE_TYPES,
+  NOCTURNE_ELEMENTS,
+} from './data/combat-types.js';
 import { NOCTURNE_DEMONS } from './data/demons.js';
+import { NOCTURNE_SKILLS } from './data/skills.js';
 import {
   NOCTURNE_DEFAULT_PLAYER_TEAM,
   NOCTURNE_OPPONENT_PRESETS,
@@ -55,6 +61,9 @@ function validateNocturneData(definition) {
       if (!definition.elements[element]) issues.push(`Demon "${demon.id}" has unknown affinity element "${element}".`);
       if (!definition.affinities[affinity]) issues.push(`Demon "${demon.id}" has unknown affinity result "${affinity}".`);
     });
+    NOCTURNE_DAMAGE_TYPES.forEach((element) => {
+      if (!demon.affinities?.[element]) issues.push(`Demon "${demon.id}" requires a ${element} affinity.`);
+    });
   });
 
   if (definition.data.defaultPlayerTeam.length !== definition.config.maxTeamSize) {
@@ -94,6 +103,8 @@ export const SMT_III_NOCTURNE_GAME = defineGame({
   family: 'Press Turn System',
   description: 'Nocturne Press Turn battles with title-specific damage formulas and temporary prototype combatants and skills.',
   dataVersion: 0,
+  elements: NOCTURNE_ELEMENTS,
+  affinities: NOCTURNE_AFFINITIES,
   config: {
     ...PROTOTYPE_GAME.config,
     maxTeamSize: 4,
@@ -103,7 +114,7 @@ export const SMT_III_NOCTURNE_GAME = defineGame({
   },
   data: {
     demons: NOCTURNE_DEMONS,
-    skills: PROTOTYPE_GAME.data.skills,
+    skills: NOCTURNE_SKILLS,
     playerRoster: NOCTURNE_PLAYER_ROSTER,
     defaultPlayerTeam: NOCTURNE_DEFAULT_PLAYER_TEAM,
     opponentPresets: NOCTURNE_OPPONENT_PRESETS,
@@ -118,6 +129,7 @@ export const SMT_III_NOCTURNE_GAME = defineGame({
     manualTargeting: true,
     commandTabs: ['skills', 'inspect'],
     partyMode: 'turn-order',
+    incomingTypes: NOCTURNE_DAMAGE_TYPES,
     levelSelection: true,
     skillSelection: true,
     analysisStats: ['strength', 'magic', 'vitality', 'agility', 'luck'],
@@ -154,4 +166,10 @@ export const SMT_III_NOCTURNE_GAME = defineGame({
   },
 });
 
-export { NOCTURNE_DEMONS };
+export {
+  NOCTURNE_AFFINITIES,
+  NOCTURNE_DAMAGE_TYPES,
+  NOCTURNE_DEMONS,
+  NOCTURNE_ELEMENTS,
+  NOCTURNE_SKILLS,
+};

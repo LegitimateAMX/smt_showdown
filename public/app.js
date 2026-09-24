@@ -682,6 +682,7 @@ function renderCommands() {
 
 function renderSkillButton(actor, skill, index, disabled) {
   const payable = engine.canPay(actor, skill);
+  const implemented = skill.implemented !== false;
   const element = ELEMENTS[skill.element];
   const target = engine.active('enemy');
   const affinity = skill.kind === 'damage' && !activeGame.presentation.manualTargeting
@@ -689,7 +690,7 @@ function renderSkillButton(actor, skill, index, disabled) {
     : null;
   const affinityTag = affinity && affinity !== 'normal' ? `<span class="affinity-hint affinity-${affinity}">${AFFINITIES[affinity].label}</span>` : '';
   return `
-    <button class="skill-button" data-skill-id="${skill.id}" type="button" ${disabled || !payable ? 'disabled' : ''} style="--element:${element.color}">
+    <button class="skill-button" data-skill-id="${skill.id}" type="button" ${disabled || !payable || !implemented ? 'disabled' : ''} style="--element:${element.color}">
       <span class="key-hint">${index + 1}</span>
       <span class="skill-icon element-${skill.element}">${element.icon}</span>
       <span class="skill-copy">
@@ -716,6 +717,10 @@ function selectPlayerSkill(skillId) {
   const actor = engine.active('player');
   const skill = SKILLS[skillId];
   if (!skill || (!actor.skills.includes(skill.id) && skill.id !== 'attack')) return;
+  if (skill.implemented === false) {
+    showToast(`${skill.name} battle mechanics have not been implemented yet.`);
+    return;
+  }
   if (!engine.canPay(actor, skill)) {
     showToast(`Not enough ${skill.costType.toUpperCase()}.`);
     return;

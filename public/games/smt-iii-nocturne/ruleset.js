@@ -125,6 +125,9 @@ export class NocturneRuleset extends PrototypeRuleset {
       if (!skill || (!actor.skills.includes(skill.id) && skill.id !== 'attack')) {
         return { ok: false, error: 'That skill is not available.', events: [] };
       }
+      if (skill.implemented === false) {
+        return { ok: false, error: `${skill.name} battle mechanics have not been implemented yet.`, events: [] };
+      }
       if (!this.canPay(actor, skill)) {
         return { ok: false, error: `Not enough ${skill.costType.toUpperCase()}.`, events: [] };
       }
@@ -414,7 +417,7 @@ export class NocturneRuleset extends PrototypeRuleset {
       return skill.damageFormula;
     }
     if (skill.id === 'attack') return 'basic';
-    if (skill.element === 'physical' || skill.element === 'gun') return 'physical';
+    if (skill.element === 'physical') return 'physical';
     return 'magic';
   }
 
