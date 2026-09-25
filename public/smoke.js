@@ -448,6 +448,345 @@ test('Nocturne includes the supplied Tyrant, Vile, and Wilder demons as selectab
   });
 });
 
+test('Nocturne includes the supplied Avatar through Entity demons as selectable combatants', () => {
+  const expected = [
+    ['makami', 'Makami', 'Avatar', 22, [186, 108, 11, 14, 9, 7, 11],
+      { fire: 'null', expel: 'repel' },
+      ['fireBreath', 'feralBite', 'media', 'rakunda', 'fogBreath', 'panicVoice'],
+      [['voidMind', 23], ['petradi', 24], ['diarama', 25], ['recarm', 26]]],
+    ['xiezhai', 'Xiezhai', 'Avatar', 26, [210, 114, 13, 12, 9, 9, 7],
+      { ice: 'null', expel: 'null', curse: 'weak', nerve: 'weak', mind: 'weak' },
+      ['hellThrust', 'mutudi', 'toxicCloud'], [['hamaon', 27], ['scout', 28], ['paraladi', 29], ['mabufula', 30]]],
+    ['yatagarasu', 'Yatagarasu', 'Avatar', 46, [348, 195, 13, 19, 12, 16, 10],
+      { force: 'repel', expel: 'repel' }, ['manaAid', 'violetFlash'],
+      [['windCutter', 47], ['manaGain', 48], ['forceBoost', 49], ['recarmdra', 50]]],
+    ['barong', 'Barong', 'Avatar', 60, [456, 246, 22, 22, 16, 16, 14],
+      { electricity: 'drain', expel: 'repel', death: 'weak' }, ['boltStorm', 'bindingCry'],
+      [['ironClaw', 61], ['mediarahan', 62], ['glacialBlast', 63], ['voidDeath', 64]]],
+    ['garuda', 'Garuda', 'Avian', 63, [492, 243, 22, 18, 19, 24, 12],
+      { expel: 'repel', death: 'weak', curse: 'null', nerve: 'null' },
+      ['zandyne', 'fogBreath', 'sukukaja', 'mazandyne', 'venomClaw', 'stoneHunt', 'diarahan'],
+      [['mahamaon', 64], ['persuade', 65], ['windCutter', 66], ['endure', 67]]],
+    ['horus', 'Horus', 'Deity', 38, [312, 162, 12, 16, 14, 21, 10],
+      { physical: 'resist', expel: 'repel', death: 'weak' }, ['watchful', 'mahama'],
+      [['manaGain', 39], ['dekunda', 40], ['liftoma', 41], ['mediarama', 42], ['violetFlash', 43]]],
+    ['atavaka', 'Atavaka', 'Deity', 47, [402, 183, 24, 14, 20, 10, 14],
+      { expel: 'repel', death: 'repel', nerve: 'weak', mind: 'weak' }, ['might', 'mightyGust'],
+      [['endure', 48], ['bindingCry', 49], ['retaliate', 50], ['chaosBlade', 51]]],
+    ['amaterasu', 'Amaterasu', 'Deity', 56, [438, 237, 19, 23, 17, 16, 16],
+      { fire: 'null', expel: 'null', death: 'null' }, ['tetrakarn', 'prominence'],
+      [['godlyLight', 57], ['debilitate', 58], ['fireRepel', 59], ['prayer', 60]]],
+    ['odin', 'Odin', 'Deity', 65, [498, 270, 24, 25, 18, 17, 16],
+      { ice: 'null', force: 'weak', expel: 'null' }, ['bufudyne', 'agidyne'],
+      [['deathbound', 66], ['makajamaon', 67], ['wooing', 68], ['mabufudyne', 69], ['maragidyne', 70]]],
+    ['mitra', 'Mitra', 'Deity', 78, [630, 309, 27, 25, 27, 16, 18],
+      { physical: 'repel', ice: 'weak', expel: 'null', death: 'null' }, ['debilitate', 'megidola', 'mamudoon'],
+      [['deathPact', 79], ['holyWrath', 80], ['fogBreath', 81], ['mahamaon', 82], ['manaSurge', 83]]],
+    ['vishnu', 'Vishnu', 'Deity', 93, [708, 384, 27, 35, 25, 20, 26],
+      { physical: 'resist', fire: 'resist', ice: 'resist', electricity: 'resist', force: 'resist', expel: 'repel', death: 'null', curse: 'resist', nerve: 'resist', mind: 'resist', almighty: 'resist' },
+      ['prayer', 'holyWrath', 'hellGaze'], [['prominence', 94], ['hadesBlast', 95], ['radiance', 96], ['physRepel', 97]]],
+    ['xuanwu', 'Xuanwu', 'Dragon', 24, [240, 105, 9, 11, 16, 4, 10],
+      { ice: 'drain', electricity: 'weak', expel: 'repel' },
+      ['lunge', 'toxicCloud', 'counter', 'flatter', 'rakukaja', 'sacrifice'],
+      [['bufula', 25], ['estoma', 26], ['iceBoost', 27], ['iceBreath', 28]]],
+    ['qingLong', 'Qing Long', 'Dragon', 44, [396, 171, 15, 13, 22, 9, 11],
+      { fire: 'weak', ice: 'drain', expel: 'null' },
+      ['bufula', 'mabufula', 'makakaja', 'makarakarn', 'mePatra', 'berserk', 'fogBreath'],
+      [['lifeGain', 45], ['stoneBite', 46], ['iceBreath', 47], ['violetFlash', 48]]],
+    ['erthys', 'Erthys', 'Element', 7, [90, 36, 6, 5, 8, 4, 5],
+      { force: 'weak', expel: 'null', death: 'null' }, ['zio', 'patra'],
+      [['rakukaja', 8], ['antiCurse', 9], ['arbitration', 10], ['mazio', 11]]],
+    ['aeros', 'Aeros', 'Element', 11, [102, 57, 5, 8, 6, 8, 5],
+      { fire: 'resist', ice: 'resist', electricity: 'resist', force: 'resist', expel: 'null', death: 'null' },
+      ['dia', 'zio'], [['lullaby', 12], ['marinKarin', 13], ['antiMind', 14], ['toxicSting', 15]]],
+    ['aquans', 'Aquans', 'Element', 15, [126, 75, 6, 10, 6, 6, 8],
+      { fire: 'weak', ice: 'repel', expel: 'null', death: 'null' }, ['sukukaja', 'antiExpel'],
+      [['mabufu', 16], ['antiNerve', 17], ['lifeBonus', 18], ['bufula', 19]]],
+    ['flaemis', 'Flaemis', 'Element', 20, [156, 96, 10, 12, 6, 6, 7],
+      { fire: 'drain', ice: 'weak', expel: 'null', death: 'null' }, ['maragi', 'brightMight'],
+      [['makakaja', 21], ['media', 22], ['voidMind', 23], ['agilao', 24]]],
+    ['araMitama', 'Ara Mitama', 'Mitama', 25, [210, 105, 12, 10, 10, 10, 10],
+      { expel: 'null', death: 'null', curse: 'null', nerve: 'null', mind: 'null' },
+      ['tarukaja', 'brightMight', 'analyze'], [['lifeAid', 26], ['lifeRefill', 27], ['counter', 28], ['lunge', 29]]],
+    ['nigiMitama', 'Nigi Mitama', 'Mitama', 29, [234, 117, 10, 10, 10, 16, 10],
+      { expel: 'null', death: 'null', curse: 'null', nerve: 'null', mind: 'null' },
+      ['rakunda', 'persuade', 'analyze'], [['fireBoost', 30], ['elecBoost', 31], ['iceBoost', 32], ['forceBoost', 33]]],
+    ['kushiMitama', 'Kushi Mitama', 'Mitama', 32, [240, 150, 9, 18, 8, 12, 12],
+      { expel: 'null', death: 'null', curse: 'null', nerve: 'null', mind: 'null' },
+      ['sukukaja', 'dekaja', 'analyze'], [['antiForce', 33], ['antiIce', 34], ['antiElec', 35], ['antiFire', 36]]],
+    ['sakiMitama', 'Saki Mitama', 'Mitama', 35, [270, 138, 10, 11, 10, 11, 20],
+      { expel: 'null', death: 'null', curse: 'null', nerve: 'null', mind: 'null' },
+      ['dormina', 'trade', 'analyze'], [['mazanma', 36], ['mediarama', 37], ['mazionga', 38], ['tetrakarn', 39]]],
+    ['albion', 'Albion', 'Entity', 64, [534, 252, 25, 20, 25, 10, 16],
+      { physical: 'null', ice: 'null', expel: 'null' },
+      ['tornado', 'berserk', 'diarama', 'lifeSurge', 'tarunda', 'evilGaze', 'rakunda', 'sukunda'],
+      [['drainAttack', 65], ['physDrain', 66], ['recarmdra', 67], ['hadesBlast', 68]]],
+  ];
+  const statKeys = ['hp', 'mp', 'strength', 'magic', 'vitality', 'agility', 'luck'];
+
+  expected.forEach(([id, name, race, level, stats, affinities, innate, future]) => {
+    const demon = NOCTURNE_GAME.data.demons[id];
+    assert(demon.name === name && demon.race === race, `${name} should have the supplied identity`);
+    assert(demon.baseLevel === level, `${name} should have the supplied base level`);
+    assert(statKeys.every((key, index) => demon.baseStats[key] === stats[index]), `${name} should have the supplied base stats`);
+    assert(Object.entries(affinities).every(([type, value]) => demon.affinities[type] === value), `${name} should have the supplied affinities`);
+    assert(JSON.stringify(demon.innateSkills) === JSON.stringify(innate), `${name} should have the supplied innate skills`);
+    assert(
+      JSON.stringify(demon.futureSkills.map(({ skillId, level: learnLevel }) => [skillId, learnLevel])) === JSON.stringify(future),
+      `${name} should have the supplied future skill levels`,
+    );
+    assert(NOCTURNE_GAME.data.playerRoster.includes(id), `${name} should be selectable by the player`);
+  });
+});
+
+test('Nocturne includes the supplied Fury demons as selectable combatants', () => {
+  const expected = [
+    ['dionysus', 'Dionysus', 44, [354, 192, 16, 20, 15, 13, 15],
+      { fire: 'null', ice: 'weak', expel: 'null', death: 'null' },
+      ['maragion', 'voidFire'], [['wineParty', 45], ['dismalTune', 46], ['tempest', 47], ['maragidyne', 48]]],
+    ['qitianDasheng', 'Qitian Dasheng', 54, [432, 201, 22, 13, 18, 20, 16],
+      { physical: 'null', expel: 'null', death: 'null' },
+      ['might', 'berserk', 'tarukaja', 'tetrakarn', 'brutalSlash', 'stoneHunt', 'sukukaja', 'sacrifice', 'rakukaja', 'endure', 'kidnap', 'lifeSurge'],
+      [['hassohappa', 55], ['darkPledge', 56], ['attackAll', 57], ['avenge', 58]]],
+    ['beidouXingjun', 'Beidou Xingjun', 61, [504, 255, 23, 24, 23, 14, 12],
+      { physical: 'resist', fire: 'weak', expel: 'null', death: 'null' },
+      ['manaAid', 'stasisBlade', 'thunderclap'], [['hellGaze', 62], ['wooing', 63], ['mamudoon', 64], ['holyWrath', 65]]],
+    ['shiva', 'Shiva', 95, [786, 363, 32, 26, 36, 26, 15],
+      { physical: 'resist', fire: 'resist', ice: 'resist', electricity: 'resist', force: 'resist', expel: 'null', death: 'null', curse: 'resist', nerve: 'resist', mind: 'resist' },
+      ['victoryCry', 'hassohappa', 'allure'], [['boltStorm', 96], ['avenge', 97], ['megidolaon', 98], ['physDrain', 99]]],
+  ];
+  const statKeys = ['hp', 'mp', 'strength', 'magic', 'vitality', 'agility', 'luck'];
+
+  expected.forEach(([id, name, level, stats, affinities, innate, future]) => {
+    const demon = NOCTURNE_GAME.data.demons[id];
+    assert(demon.name === name && demon.race === 'Fury', `${name} should have the supplied identity`);
+    assert(demon.baseLevel === level, `${name} should have the supplied base level`);
+    assert(statKeys.every((key, index) => demon.baseStats[key] === stats[index]), `${name} should have the supplied base stats`);
+    assert(Object.entries(affinities).every(([type, value]) => demon.affinities[type] === value), `${name} should have the supplied affinities`);
+    assert(JSON.stringify(demon.innateSkills) === JSON.stringify(innate), `${name} should have the supplied innate skills`);
+    assert(
+      JSON.stringify(demon.futureSkills.map(({ skillId, level: learnLevel }) => [skillId, learnLevel])) === JSON.stringify(future),
+      `${name} should have the supplied future skill levels`,
+    );
+    assert(NOCTURNE_GAME.data.playerRoster.includes(id), `${name} should be selectable by the player`);
+  });
+});
+
+test('Nocturne includes the supplied Genma demons as selectable combatants', () => {
+  const expected = [
+    ['kuramaTengu', 'Kurama Tengu', 38, [306, 165, 13, 17, 13, 17, 8],
+      { force: 'drain', expel: 'null' },
+      ['wingBuffet', 'tarukaja', 'manaGain', 'gonnection', 'mahama', 'might', 'tornado'],
+      [['violetFlash', 39], ['forceBoost', 40], ['fogBreath', 41], ['windCutter', 42], ['starlight', 43]]],
+    ['hanuman', 'Hanuman', 46, [366, 174, 17, 12, 15, 19, 13],
+      { physical: 'resist', expel: 'null' },
+      ['might', 'berserk', 'tarukaja', 'tetrakarn', 'brutalSlash', 'stoneHunt', 'sukukaja', 'sacrifice'],
+      [['rakukaja', 47], ['endure', 48], ['kidnap', 49], ['lifeSurge', 50]]],
+    ['cuChulainn', 'Cu Chulainn', 52, [414, 201, 21, 15, 17, 14, 15],
+      { force: 'repel', expel: 'null' },
+      ['estoma', 'guillotine', 'sukukaja', 'retaliate', 'taunt', 'voidCurse', 'wooing', 'tempest'],
+      [['zandyne', 53], ['thunderclap', 54], ['charisma', 55], ['blight', 56], ['attackAll', 57]]],
+  ];
+  const statKeys = ['hp', 'mp', 'strength', 'magic', 'vitality', 'agility', 'luck'];
+
+  expected.forEach(([id, name, level, stats, affinities, innate, future]) => {
+    const demon = NOCTURNE_GAME.data.demons[id];
+    assert(demon.name === name && demon.race === 'Genma', `${name} should have the supplied identity`);
+    assert(demon.baseLevel === level, `${name} should have the supplied base level`);
+    assert(statKeys.every((key, index) => demon.baseStats[key] === stats[index]), `${name} should have the supplied base stats`);
+    assert(Object.entries(affinities).every(([type, value]) => demon.affinities[type] === value), `${name} should have the supplied affinities`);
+    assert(JSON.stringify(demon.innateSkills) === JSON.stringify(innate), `${name} should have the supplied innate skills`);
+    assert(
+      JSON.stringify(demon.futureSkills.map(({ skillId, level: learnLevel }) => [skillId, learnLevel])) === JSON.stringify(future),
+      `${name} should have the supplied future skill levels`,
+    );
+    assert(NOCTURNE_GAME.data.playerRoster.includes(id), `${name} should be selectable by the player`);
+  });
+});
+
+test('Nocturne includes the supplied Holy demons as selectable combatants', () => {
+  const expected = [
+    ['shiisaa', 'Shiisaa', 13, [120, 57, 9, 6, 7, 9, 6],
+      { fire: 'weak', electricity: 'drain', expel: 'null' }, ['shock', 'feralClaw'],
+      [['warCry', 14], ['brainwash', 15], ['stoneBite', 16], ['counter', 17], ['antiFire', 18]]],
+    ['unicorn', 'Unicorn', 21, [186, 99, 9, 12, 10, 7, 7],
+      { electricity: 'weak', expel: 'null', curse: 'null', mind: 'null' }, ['rakukaja', 'mabufu', 'media'],
+      [['lifeRefill', 22], ['stunBite', 23], ['tetraja', 24], ['mePatra', 25], ['diarama', 26]]],
+    ['senri', 'Senri', 27, [216, 135, 10, 14, 9, 12, 9],
+      { electricity: 'weak', force: 'drain', expel: 'null' },
+      ['stunNeedle', 'marinKarin', 'paraladi', 'manaBonus', 'feralClaw', 'pester', 'muteGaze'],
+      [['mazanma', 28], ['luckyFind', 29], ['stoneHunt', 30], ['drainAttack', 31]]],
+    ['zhuque', 'Zhuque', 36, [276, 138, 10, 10, 10, 17, 13],
+      { ice: 'weak', electricity: 'drain', expel: 'null' }, ['liftoma', 'wingBuffet', 'fireBreath'],
+      [['recarm', 37], ['arbitration', 38], ['mazionga', 39], ['lifeAid', 40]]],
+    ['baihu', 'Baihu', 43, [348, 153, 19, 8, 15, 17, 8],
+      { fire: 'weak', ice: 'null', expel: 'null' }, ['iceBreath', 'lifeAid', 'stoneBite'],
+      [['might', 44], ['beseech', 45], ['focus', 46], ['bufudyne', 47]]],
+    ['chimera', 'Chimera', 55, [426, 204, 23, 13, 16, 17, 10],
+      { fire: 'drain', expel: 'null', nerve: 'weak', mind: 'weak' }, ['fireBreath', 'fireBoost', 'warCry'],
+      [['ironClaw', 56], ['kidnap', 57], ['kamikaze', 58], ['sonicWave', 59]]],
+  ];
+  const statKeys = ['hp', 'mp', 'strength', 'magic', 'vitality', 'agility', 'luck'];
+
+  expected.forEach(([id, name, level, stats, affinities, innate, future]) => {
+    const demon = NOCTURNE_GAME.data.demons[id];
+    assert(demon.name === name && demon.race === 'Holy', `${name} should have the supplied identity`);
+    assert(demon.baseLevel === level, `${name} should have the supplied base level`);
+    assert(statKeys.every((key, index) => demon.baseStats[key] === stats[index]), `${name} should have the supplied base stats`);
+    assert(Object.entries(affinities).every(([type, value]) => demon.affinities[type] === value), `${name} should have the supplied affinities`);
+    assert(JSON.stringify(demon.innateSkills) === JSON.stringify(innate), `${name} should have the supplied innate skills`);
+    assert(
+      JSON.stringify(demon.futureSkills.map(({ skillId, level: learnLevel }) => [skillId, learnLevel])) === JSON.stringify(future),
+      `${name} should have the supplied future skill levels`,
+    );
+    assert(NOCTURNE_GAME.data.playerRoster.includes(id), `${name} should be selectable by the player`);
+  });
+});
+
+test('Nocturne includes the supplied Kishin demons as selectable combatants', () => {
+  const expected = [
+    ['takeMinakata', 'Take-Minakata', 17, [168, 75, 11, 8, 11, 9, 5],
+      { fire: 'weak', electricity: 'repel', expel: 'null', nerve: 'weak' }, ['darkMight', 'mazio', 'zionga'],
+      [['makajam', 18], ['intimidate', 19], ['stunGaze', 20], ['dekaja', 21], ['focus', 22]]],
+    ['zouchouten', 'Zouchouten', 27, [234, 111, 15, 10, 12, 7, 10],
+      { force: 'weak', expel: 'null', curse: 'null', nerve: 'null' }, ['brutalSlash', 'agilao', 'mahama'],
+      [['detain', 28], ['hamaon', 29], ['antiDeath', 30], ['might', 31]]],
+    ['komokuten', 'Komokuten', 33, [282, 135, 16, 12, 14, 9, 9],
+      { electricity: 'weak', force: 'repel', expel: 'null' }, ['mightyGust', 'mazanma'],
+      [['lifeGain', 34], ['beseech', 35], ['manaBonus', 36], ['tetraja', 37]]],
+    ['okuninushi', 'Okuninushi', 39, [312, 165, 16, 16, 13, 11, 10],
+      { expel: 'repel', death: 'null' }, ['chaosBlade', 'mamudo'],
+      [['wooing', 40], ['agidyne', 41], ['makajamaon', 42], ['beckonCall', 43]]],
+    ['takeMikazuchi', 'Take-Mikazuchi', 45, [372, 177, 19, 14, 17, 11, 11],
+      { electricity: 'repel', force: 'weak', expel: 'null' }, ['ziodyne', 'shock'],
+      [['arbitration', 46], ['darkSword', 47], ['lifeRefill', 48], ['mazionga', 49]]],
+    ['jikokuten', 'Jikokuten', 52, [426, 204, 21, 16, 19, 11, 12],
+      { fire: 'weak', ice: 'repel', expel: 'null' }, ['stasisBlade', 'diarahan'],
+      [['dekunda', 53], ['bufudyne', 54], ['darkPledge', 55], ['mazandyne', 56], ['boltStorm', 57]]],
+    ['futomimi', 'Futomimi', 63, [547, 267, 20, 26, 20, 15, 17],
+      { physical: 'resist', expel: 'null', death: 'null', curse: 'null', nerve: 'null', mind: 'null' },
+      ['focus', 'warCry', 'muteGaze', 'lunge'], [['might', 64], ['lifeSurge', 65], ['manaSurge', 66]]],
+    ['bishamonten', 'Bishamonten', 72, [756, 267, 25, 18, 25, 17, 15],
+      { fire: 'repel', ice: 'weak', expel: 'null' }, ['thunderclap', 'attackAll'],
+      [['prominence', 73], ['fireBoost', 74], ['detain', 75], ['endure', 76], ['hassohappa', 77]]],
+    ['thor', 'Thor', 76, [612, 288, 28, 20, 26, 12, 17],
+      { electricity: 'drain', expel: 'null', curse: 'weak', nerve: 'weak' }, ['avenge', 'ziodyne', 'hadesBlast'],
+      [['mediarahan', 77], ['maziodyne', 78], ['stasisBlade', 79], ['fireRepel', 80]]],
+  ];
+  const statKeys = ['hp', 'mp', 'strength', 'magic', 'vitality', 'agility', 'luck'];
+
+  expected.forEach(([id, name, level, stats, affinities, innate, future]) => {
+    const demon = NOCTURNE_GAME.data.demons[id];
+    assert(demon.name === name && demon.race === 'Kishin', `${name} should have the supplied identity`);
+    assert(demon.baseLevel === level, `${name} should have the supplied base level`);
+    assert(statKeys.every((key, index) => demon.baseStats[key] === stats[index]), `${name} should have the supplied base stats`);
+    assert(Object.entries(affinities).every(([type, value]) => demon.affinities[type] === value), `${name} should have the supplied affinities`);
+    assert(JSON.stringify(demon.innateSkills) === JSON.stringify(innate), `${name} should have the supplied innate skills`);
+    assert(
+      JSON.stringify(demon.futureSkills.map(({ skillId, level: learnLevel }) => [skillId, learnLevel])) === JSON.stringify(future),
+      `${name} should have the supplied future skill levels`,
+    );
+    assert(NOCTURNE_GAME.data.playerRoster.includes(id), `${name} should be selectable by the player`);
+  });
+});
+
+test('Nocturne includes the supplied Lady and Megami demons as selectable combatants', () => {
+  const expected = [
+    ['kikuriHime', 'Kikuri-Hime', 'Lady', 24, [210, 120, 10, 16, 11, 8, 11],
+      { fire: 'weak', expel: 'null', nerve: 'null', mind: 'null' }, ['diarama', 'sexyGaze'],
+      [['maidensPlea', 25], ['posumudi', 26], ['mePatra', 27], ['recarm', 28]]],
+    ['kushinada', 'Kushinada', 'Lady', 41, [330, 180, 12, 19, 14, 10, 18],
+      { expel: 'repel', death: 'weak' }, ['mediarama', 'nag', 'toxicSting'],
+      [['maragion', 42], ['paraladi', 43], ['luckyFind', 44], ['beseech', 45]]],
+    ['parvati', 'Parvati', 'Lady', 57, [432, 240, 15, 23, 15, 16, 20],
+      { fire: 'drain', ice: 'weak', expel: 'repel' },
+      ['agidyne', 'recarm', 'sexyGaze', 'maragidyne', 'makatora', 'pester', 'allure'],
+      [['mediarama', 58], ['tetrakarn', 59], ['thunderclap', 60], ['radiance', 61]]],
+    ['kali', 'Kali', 'Lady', 67, [540, 258, 25, 19, 23, 19, 13],
+      { fire: 'null', ice: 'weak', expel: 'null', death: 'repel' }, ['tentarafoo', 'deathbound'],
+      [['avenge', 68], ['fogBreath', 69], ['lifeSurge', 70], ['darkSword', 71]]],
+    ['skadi', 'Skadi', 'Lady', 74, [570, 309, 23, 29, 21, 18, 15],
+      { electricity: 'weak', force: 'null', expel: 'null', curse: 'null' },
+      ['might', 'mazandyne', 'forceRepel', 'darkPledge', 'thunderclap', 'manaAid', 'windCutter'],
+      [['makajamaon', 75], ['makakaja', 76], ['elecRepel', 77], ['earthquake', 78]]],
+    ['ameNoUzume', 'Ame-no-Uzume', 'Megami', 18, [156, 90, 6, 12, 8, 8, 12],
+      { electricity: 'weak', force: 'null', expel: 'null' }, ['media', 'mazan'],
+      [['hama', 19], ['seduce', 20], ['petradi', 21], ['lifeBonus', 22], ['manaRefill', 23]]],
+    ['sarasvati', 'Sarasvati', 'Megami', 30, [246, 141, 9, 17, 11, 9, 12],
+      { fire: 'weak', expel: 'null', curse: 'null', nerve: 'null', mind: 'null' }, ['muteGaze', 'manaRefill'],
+      [['recarm', 31], ['seduce', 32], ['mazanma', 33], ['forceBoost', 34]]],
+    ['sati', 'Sati', 'Megami', 48, [366, 204, 11, 20, 13, 15, 17],
+      { fire: 'drain', ice: 'weak', expel: 'repel' }, ['agidyne', 'recarm', 'sexyGaze'],
+      [['maragidyne', 49], ['makatora', 50], ['pester', 51], ['allure', 52]]],
+    ['lakshmi', 'Lakshmi', 'Megami', 54, [414, 234, 14, 24, 15, 13, 16],
+      { force: 'weak', expel: 'repel', curse: 'null', nerve: 'null', mind: 'null' }, ['mediarahan', 'seduce'],
+      [['manaAid', 55], ['stoneGaze', 56], ['manaSurge', 57], ['samrecarm', 58], ['recarmdra', 59]]],
+    ['scathach', 'Scathach', 'Megami', 64, [486, 270, 21, 26, 17, 18, 15],
+      { electricity: 'weak', force: 'null', expel: 'null', curse: 'null' }, ['might', 'mazandyne'],
+      [['forceRepel', 65], ['darkPledge', 66], ['thunderclap', 67], ['manaAid', 68], ['windCutter', 69]]],
+  ];
+  const statKeys = ['hp', 'mp', 'strength', 'magic', 'vitality', 'agility', 'luck'];
+
+  expected.forEach(([id, name, race, level, stats, affinities, innate, future]) => {
+    const demon = NOCTURNE_GAME.data.demons[id];
+    assert(demon.name === name && demon.race === race, `${name} should have the supplied identity`);
+    assert(demon.baseLevel === level, `${name} should have the supplied base level`);
+    assert(statKeys.every((key, index) => demon.baseStats[key] === stats[index]), `${name} should have the supplied base stats`);
+    assert(Object.entries(affinities).every(([type, value]) => demon.affinities[type] === value), `${name} should have the supplied affinities`);
+    assert(JSON.stringify(demon.innateSkills) === JSON.stringify(innate), `${name} should have the supplied innate skills`);
+    assert(
+      JSON.stringify(demon.futureSkills.map(({ skillId, level: learnLevel }) => [skillId, learnLevel])) === JSON.stringify(future),
+      `${name} should have the supplied future skill levels`,
+    );
+    assert(NOCTURNE_GAME.data.playerRoster.includes(id), `${name} should be selectable by the player`);
+  });
+});
+
+test('Nocturne includes the supplied Seraph and Wargod demons as selectable combatants', () => {
+  const expected = [
+    ['uriel', 'Uriel', 'Seraph', 73, [558, 291, 25, 24, 20, 21, 18],
+      { fire: 'null', expel: 'repel' },
+      ['mahamaon', 'prominence', 'brainwash', 'mediarahan', 'muteGaze', 'holyWrath', 'debilitate'],
+      [['heatWave', 74], ['drainAttack', 75], ['megidola', 76], ['radiance', 77]]],
+    ['raphael', 'Raphael', 'Seraph', 84, [636, 330, 26, 26, 22, 28, 17],
+      { fire: 'null', force: 'null', expel: 'repel' }, ['makarakarn', 'tetrakarn', 'manaRefill'],
+      [['prayer', 85], ['mahamaon', 86], ['stasisBlade', 87], ['holyWrath', 88]]],
+    ['gabriel', 'Gabriel', 'Seraph', 87, [654, 351, 24, 30, 22, 24, 22],
+      { fire: 'null', electricity: 'null', force: 'null', expel: 'repel' }, ['samrecarm', 'ziodyne', 'maziodyne'],
+      [['blight', 88], ['persuade', 89], ['elecBoost', 90], ['radiance', 91]]],
+    ['michael', 'Michael', 'Seraph', 90, [678, 360, 29, 30, 23, 25, 18],
+      { fire: 'null', ice: 'null', electricity: 'null', force: 'null', expel: 'repel' }, ['deathbound', 'endure'],
+      [['victoryCry', 91], ['tarukaja', 92], ['manaSurge', 93], ['megidolaon', 94]]],
+    ['metatron', 'Metatron', 'Seraph', 95, [744, 387, 32, 34, 29, 24, 16],
+      { physical: 'resist', fire: 'resist', electricity: 'resist', force: 'resist', expel: 'null', death: 'null', curse: 'null', nerve: 'null', mind: 'null' },
+      ['mahamaon', 'tarukaja', 'makakaja', 'debilitate', 'megidolaon'],
+      [['holyWrath', 96], ['fireOfSinai', 97], ['victoryCry', 98]]],
+    ['valkyrie', 'Valkyrie', 'Wargod', 33, [282, 135, 15, 12, 14, 12, 10],
+      { fire: 'drain', expel: 'null' },
+      ['tetraja', 'agilao', 'makajam', 'diarama', 'stoneGaze', 'makatora', 'mePatra'],
+      [['guillotine', 34], ['soulRecruit', 35], ['counter', 36], ['might', 37]]],
+    ['ganesha', 'Ganesha', 'Wargod', 58, [474, 237, 21, 21, 21, 12, 13],
+      { ice: 'null', electricity: 'weak', force: 'null', expel: 'null' },
+      ['bindingCry', 'watchful', 'scout', 'stasisBlade', 'panicVoice', 'forceBoost', 'chaosBlade', 'mazandyne'],
+      [['endure', 59], ['forceDrain', 60], ['debilitate', 61], ['tempest', 62]]],
+  ];
+  const statKeys = ['hp', 'mp', 'strength', 'magic', 'vitality', 'agility', 'luck'];
+
+  expected.forEach(([id, name, race, level, stats, affinities, innate, future]) => {
+    const demon = NOCTURNE_GAME.data.demons[id];
+    assert(demon.name === name && demon.race === race, `${name} should have the supplied identity`);
+    assert(demon.baseLevel === level, `${name} should have the supplied base level`);
+    assert(statKeys.every((key, index) => demon.baseStats[key] === stats[index]), `${name} should have the supplied base stats`);
+    assert(Object.entries(affinities).every(([type, value]) => demon.affinities[type] === value), `${name} should have the supplied affinities`);
+    assert(JSON.stringify(demon.innateSkills) === JSON.stringify(innate), `${name} should have the supplied innate skills`);
+    assert(
+      JSON.stringify(demon.futureSkills.map(({ skillId, level: learnLevel }) => [skillId, learnLevel])) === JSON.stringify(future),
+      `${name} should have the supplied future skill levels`,
+    );
+    assert(NOCTURNE_GAME.data.playerRoster.includes(id), `${name} should be selectable by the player`);
+  });
+});
+
 test('Nocturne clamps selected levels and unlocks future skills at their learn level', () => {
   const leveledGame = defineGame({
     ...NOCTURNE_GAME,

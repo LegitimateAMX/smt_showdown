@@ -162,6 +162,116 @@ const TYRANT_VILE_WILDER_SKILLS = {
   elecRepel: pendingSkill('elecRepel', 'Elec Repel', 'support'),
 };
 
+const AVATAR_TO_ENTITY_SKILLS = {
+  voidMind: pendingSkill('voidMind', 'Void Mind', 'support'),
+  petradi: pendingSkill('petradi', 'Petradi', 'recovery'),
+  recarm: pendingSkill('recarm', 'Recarm', 'recovery'),
+  mutudi: pendingSkill('mutudi', 'Mutudi', 'recovery'),
+  toxicCloud: pendingSkill('toxicCloud', 'Toxic Cloud', 'curse'),
+  hamaon: pendingSkill('hamaon', 'Hamaon', 'expel'),
+  scout: pendingSkill('scout', 'Scout', 'support'),
+  paraladi: pendingSkill('paraladi', 'Paraladi', 'recovery'),
+  violetFlash: pendingSkill('violetFlash', 'Violet Flash', 'expel'),
+  forceBoost: pendingSkill('forceBoost', 'Force Boost', 'support'),
+  recarmdra: pendingSkill('recarmdra', 'Recarmdra', 'recovery'),
+  mediarahan: pendingSkill('mediarahan', 'Mediarahan', 'recovery'),
+  glacialBlast: pendingSkill('glacialBlast', 'Glacial Blast', 'ice'),
+  voidDeath: pendingSkill('voidDeath', 'Void Death', 'support'),
+  stoneHunt: pendingSkill('stoneHunt', 'Stone Hunt', 'support'),
+  endure: pendingSkill('endure', 'Endure', 'support'),
+  mahama: pendingSkill('mahama', 'Mahama', 'expel'),
+  liftoma: pendingSkill('liftoma', 'Liftoma', 'support'),
+  might: pendingSkill('might', 'Might', 'support'),
+  mightyGust: pendingSkill('mightyGust', 'Mighty Gust', 'physical'),
+  godlyLight: pendingSkill('godlyLight', 'Godly Light', 'expel'),
+  fireRepel: pendingSkill('fireRepel', 'Fire Repel', 'support'),
+  prayer: pendingSkill('prayer', 'Prayer', 'recovery'),
+  bufudyne: pendingSkill('bufudyne', 'Bufudyne', 'ice'),
+  agidyne: pendingSkill('agidyne', 'Agidyne', 'fire'),
+  deathbound: pendingSkill('deathbound', 'Deathbound', 'physical'),
+  megidola: pendingSkill('megidola', 'Megidola', 'almighty'),
+  deathPact: pendingSkill('deathPact', 'Death Pact', 'support'),
+  holyWrath: pendingSkill('holyWrath', 'Holy Wrath', 'expel'),
+  manaSurge: pendingSkill('manaSurge', 'Mana Surge', 'support'),
+  radiance: pendingSkill('radiance', 'Radiance', 'expel'),
+  counter: pendingSkill('counter', 'Counter', 'support'),
+  bufula: pendingSkill('bufula', 'Bufula', 'ice'),
+  estoma: pendingSkill('estoma', 'Estoma', 'support'),
+  makarakarn: pendingSkill('makarakarn', 'Makarakarn', 'support'),
+  mePatra: pendingSkill('mePatra', 'Me Patra', 'recovery'),
+  lifeGain: pendingSkill('lifeGain', 'Life Gain', 'support'),
+  stoneBite: pendingSkill('stoneBite', 'Stone Bite', 'physical'),
+  patra: pendingSkill('patra', 'Patra', 'recovery'),
+  antiCurse: pendingSkill('antiCurse', 'Anti-Curse', 'support'),
+  arbitration: pendingSkill('arbitration', 'Arbitration', 'support'),
+  lullaby: pendingSkill('lullaby', 'Lullaby', 'mind'),
+  antiMind: pendingSkill('antiMind', 'Anti-Mind', 'support'),
+  agilao: pendingSkill('agilao', 'Agilao', 'fire'),
+  analyze: pendingSkill('analyze', 'Analyze', 'support'),
+  lifeAid: pendingSkill('lifeAid', 'Life Aid', 'support'),
+  fireBoost: pendingSkill('fireBoost', 'Fire Boost', 'support'),
+  antiForce: pendingSkill('antiForce', 'Anti-Force', 'support'),
+  antiIce: pendingSkill('antiIce', 'Anti-Ice', 'support'),
+  antiElec: pendingSkill('antiElec', 'Anti-Elec', 'support'),
+  antiFire: pendingSkill('antiFire', 'Anti-Fire', 'support'),
+  trade: pendingSkill('trade', 'Trade', 'support'),
+  tornado: pendingSkill('tornado', 'Tornado', 'force'),
+  physDrain: pendingSkill('physDrain', 'Phys Drain', 'support'),
+};
+
+const FURY_SKILLS = {
+  voidFire: pendingSkill('voidFire', 'Void Fire', 'support'),
+  wineParty: pendingSkill('wineParty', 'Wine Party', 'mind'),
+  brutalSlash: pendingSkill('brutalSlash', 'Brutal Slash', 'physical'),
+  kidnap: pendingSkill('kidnap', 'Kidnap', 'support'),
+  hassohappa: pendingSkill('hassohappa', 'Hassohappa', 'physical'),
+  stasisBlade: pendingSkill('stasisBlade', 'Stasis Blade', 'physical'),
+  thunderclap: pendingSkill('thunderclap', 'Thunderclap', 'expel'),
+  allure: pendingSkill('allure', 'Allure', 'support'),
+};
+
+const GENMA_SKILLS = {
+  gonnection: pendingSkill('gonnection', 'Gonnection', 'support'),
+  starlight: pendingSkill('starlight', 'Starlight', 'expel'),
+  guillotine: pendingSkill('guillotine', 'Guillotine', 'physical'),
+  voidCurse: pendingSkill('voidCurse', 'Void Curse', 'support'),
+  blight: pendingSkill('blight', 'Blight', 'physical'),
+};
+
+const HOLY_SKILLS = {
+  brainwash: pendingSkill('brainwash', 'Brainwash', 'support'),
+  stunBite: pendingSkill('stunBite', 'Stun Bite', 'physical'),
+  stunNeedle: pendingSkill('stunNeedle', 'Stun Needle', 'physical'),
+  manaBonus: pendingSkill('manaBonus', 'Mana Bonus', 'support'),
+  pester: pendingSkill('pester', 'Pester', 'support'),
+  luckyFind: pendingSkill('luckyFind', 'Lucky Find', 'support'),
+  beseech: pendingSkill('beseech', 'Beseech', 'support'),
+};
+
+const KISHIN_SKILLS = {
+  darkMight: pendingSkill('darkMight', 'Dark Might', 'support'),
+  makajam: pendingSkill('makajam', 'Makajam', 'mind'),
+  detain: pendingSkill('detain', 'Detain', 'support'),
+  antiDeath: pendingSkill('antiDeath', 'Anti-Death', 'support'),
+  darkSword: pendingSkill('darkSword', 'Dark Sword', 'physical'),
+};
+
+const LADY_AND_MEGAMI_SKILLS = {
+  sexyGaze: pendingSkill('sexyGaze', 'Sexy Gaze', 'mind'),
+  maidensPlea: pendingSkill('maidensPlea', "Maiden's Plea", 'support'),
+  nag: pendingSkill('nag', 'Nag', 'support'),
+  makatora: pendingSkill('makatora', 'Makatora', 'support'),
+  forceRepel: pendingSkill('forceRepel', 'Force Repel', 'support'),
+  earthquake: pendingSkill('earthquake', 'Earthquake', 'physical'),
+  seduce: pendingSkill('seduce', 'Seduce', 'support'),
+  manaRefill: pendingSkill('manaRefill', 'Mana Refill', 'support'),
+};
+
+const SERAPH_AND_WARGOD_SKILLS = {
+  fireOfSinai: pendingSkill('fireOfSinai', 'Fire of Sinai', 'almighty'),
+  soulRecruit: pendingSkill('soulRecruit', 'Soul Recruit', 'support'),
+};
+
 /**
  * Temporary skill records adapted to Nocturne's type names. These remain
  * placeholders until the title's authoritative move catalog is supplied.
@@ -181,4 +291,11 @@ export const NOCTURNE_SKILLS = {
   ...ADDITIONAL_FOUL_SKILLS,
   ...HAUNT_AND_RAPTOR_SKILLS,
   ...TYRANT_VILE_WILDER_SKILLS,
+  ...AVATAR_TO_ENTITY_SKILLS,
+  ...FURY_SKILLS,
+  ...GENMA_SKILLS,
+  ...HOLY_SKILLS,
+  ...KISHIN_SKILLS,
+  ...LADY_AND_MEGAMI_SKILLS,
+  ...SERAPH_AND_WARGOD_SKILLS,
 };
