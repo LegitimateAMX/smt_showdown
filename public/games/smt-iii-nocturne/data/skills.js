@@ -272,6 +272,25 @@ const SERAPH_AND_WARGOD_SKILLS = {
   soulRecruit: pendingSkill('soulRecruit', 'Soul Recruit', 'support'),
 };
 
+const BEAST_AND_BRUTE_SKILLS = {
+  haggle: pendingSkill('haggle', 'Haggle', 'support'),
+  begging: pendingSkill('begging', 'Begging', 'support'),
+};
+
+const FALLEN_AND_FEMME_SKILLS = {
+  shibaboo: pendingSkill('shibaboo', 'Shibaboo', 'nerve'),
+  voidIce: pendingSkill('voidIce', 'Void Ice', 'support'),
+};
+
+const JIRAE_AND_NIGHT_SKILLS = {
+  voidExpel: pendingSkill('voidExpel', 'Void Expel', 'support'),
+  fireDrain: pendingSkill('fireDrain', 'Fire Drain', 'support'),
+};
+
+const SNAKE_SKILLS = {
+  iceDrain: pendingSkill('iceDrain', 'Ice Drain', 'support'),
+};
+
 /**
  * Temporary skill records adapted to Nocturne's type names. These remain
  * placeholders until the title's authoritative move catalog is supplied.
@@ -298,4 +317,8 @@ export const NOCTURNE_SKILLS = {
   ...KISHIN_SKILLS,
   ...LADY_AND_MEGAMI_SKILLS,
   ...SERAPH_AND_WARGOD_SKILLS,
+  ...BEAST_AND_BRUTE_SKILLS,
+  ...FALLEN_AND_FEMME_SKILLS,
+  ...JIRAE_AND_NIGHT_SKILLS,
+  ...SNAKE_SKILLS,
 };
