@@ -173,6 +173,16 @@ export const NOCTURNE_PLAYER_ROSTER = [
   'jinn',
   'pulukishi',
   'efreet',
+  'matador',
+  'daisoujou',
+  'hellBiker',
+  'whiteRider',
+  'redRider',
+  'blackRider',
+  'paleRider',
+  'motherHarlot',
+  'trumpeter',
+  'dante',
 ];
 
 export const NOCTURNE_DEFAULT_PLAYER_TEAM = ['pixie', 'jackFrost', 'oni', 'angel'];

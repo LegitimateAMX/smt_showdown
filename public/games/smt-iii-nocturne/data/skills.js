@@ -291,6 +291,35 @@ const SNAKE_SKILLS = {
   iceDrain: pendingSkill('iceDrain', 'Ice Drain', 'support'),
 };
 
+const FIEND_SKILLS = {
+  andalucia: pendingSkill('andalucia', 'Andalucia', 'physical'),
+  redCapote: pendingSkill('redCapote', 'Red Capote', 'support'),
+  meditation: pendingSkill('meditation', 'Meditation', 'almighty'),
+  preach: pendingSkill('preach', 'Preach', 'mind'),
+  hellSpin: pendingSkill('hellSpin', 'Hell Spin', 'physical'),
+  hellBurner: pendingSkill('hellBurner', 'Hell Burner', 'fire'),
+  hellExhaust: pendingSkill('hellExhaust', 'Hell Exhaust', 'force'),
+  godsBow: pendingSkill('godsBow', "God's Bow", 'expel'),
+  terrorblade: pendingSkill('terrorblade', 'Terrorblade', 'physical'),
+  soulDivide: pendingSkill('soulDivide', 'Soul Divide', 'almighty'),
+  pestilence: pendingSkill('pestilence', 'Pestilence', 'death'),
+  deathLust: pendingSkill('deathLust', 'Death Lust', 'almighty'),
+  beastRoar: pendingSkill('beastRoar', 'Beast Roar', 'support'),
+  holyMelody: pendingSkill('holyMelody', 'Holy Melody', 'recovery'),
+  evilMelody: pendingSkill('evilMelody', 'Evil Melody', 'almighty'),
+  eAndI: pendingSkill('eAndI', 'E&I', 'physical'),
+  rebellion: pendingSkill('rebellion', 'Rebellion', 'physical'),
+  neverYield: pendingSkill('neverYield', 'Never Yield', 'support'),
+  provoke: pendingSkill('provoke', 'Provoke', 'support'),
+  holyStar: pendingSkill('holyStar', 'Holy Star', 'support'),
+  roundtrip: pendingSkill('roundtrip', 'Roundtrip', 'electricity'),
+  whirlwind: pendingSkill('whirlwind', 'Whirlwind', 'force'),
+  bulletTime: pendingSkill('bulletTime', 'Bullet Time', 'physical'),
+  stinger: pendingSkill('stinger', 'Stinger', 'physical'),
+  sonsOath: pendingSkill('sonsOath', "Son's Oath", 'support'),
+  showtime: pendingSkill('showtime', 'Showtime', 'almighty'),
+};
+
 /**
  * Temporary skill records adapted to Nocturne's type names. These remain
  * placeholders until the title's authoritative move catalog is supplied.
@@ -321,4 +350,5 @@ export const NOCTURNE_SKILLS = {
   ...FALLEN_AND_FEMME_SKILLS,
   ...JIRAE_AND_NIGHT_SKILLS,
   ...SNAKE_SKILLS,
+  ...FIEND_SKILLS,
 };

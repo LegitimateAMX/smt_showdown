@@ -1168,6 +1168,65 @@ test('Nocturne includes the additional supplied Yoma demons as selectable combat
   });
 });
 
+test('Nocturne includes the supplied Fiend demons as selectable combatants', () => {
+  const expected = [
+    ['matador', 'Matador', 30, [246, 117, 12, 9, 11, 19, 9],
+      { force: 'null', expel: 'null', death: 'null', curse: 'null', nerve: 'null', mind: 'null' },
+      ['mazan', 'andalucia'],
+      [['dekunda', 31], ['focus', 32], ['taunt', 33], ['redCapote', 34]]],
+    ['daisoujou', 'Daisoujou', 37, [288, 174, 12, 21, 11, 13, 10],
+      { expel: 'repel', death: 'repel', curse: 'drain', mind: 'drain', nerve: 'null' },
+      ['meditation', 'mahamaon'], [['mamudoon', 38], ['prayer', 39], ['preach', 40]]],
+    ['hellBiker', 'Hell Biker', 42, [336, 168, 17, 14, 14, 17, 10],
+      { fire: 'null', force: 'drain', expel: 'null', death: 'null', curse: 'null', nerve: 'null', mind: 'null' },
+      ['hellSpin', 'hellBurner'], [['hellExhaust', 43], ['attackAll', 44]]],
+    ['whiteRider', 'White Rider', 52, [408, 207, 23, 17, 16, 18, 13],
+      { fire: 'null', expel: 'null', death: 'null', curse: 'null', nerve: 'null', mind: 'null' },
+      ['godsBow', 'prominence'], [['tetraja', 53], ['dekaja', 54], ['manaAid', 55]]],
+    ['redRider', 'Red Rider', 55, [438, 228, 23, 21, 18, 15, 13],
+      { electricity: 'null', force: 'null', expel: 'null', death: 'null', curse: 'null', nerve: 'null', mind: 'null' },
+      ['terrorblade', 'windCutter'], [['boltStorm', 56], ['dekunda', 57], ['avenge', 58]]],
+    ['blackRider', 'Black Rider', 61, [462, 258, 22, 25, 16, 20, 13],
+      { ice: 'drain', expel: 'null', death: 'null', curse: 'null', nerve: 'null', mind: 'null' },
+      ['soulDivide', 'glacialBlast'],
+      [['manaDrain', 62], ['mamudoon', 63], ['megidola', 64], ['manaSurge', 65], ['megidolaon', 66]]],
+    ['paleRider', 'Pale Rider', 63, [486, 267, 24, 26, 18, 17, 13],
+      { ice: 'null', expel: 'null', death: 'null', curse: 'null', nerve: 'null', mind: 'null' },
+      ['pestilence', 'mabufudyne'],
+      [['eternalRest', 64], ['blight', 65], ['darkMight', 66], ['brightMight', 67]]],
+    ['motherHarlot', 'Mother Harlot', 69, [528, 279, 23, 24, 19, 19, 19],
+      { physical: 'repel', electricity: 'drain', expel: 'null', death: 'null', curse: 'null', nerve: 'null', mind: 'null' },
+      ['deathLust', 'maziodyne', 'makajamaon'],
+      [['dekunda', 70], ['focus', 71], ['boltStorm', 72], ['beastRoar', 73]]],
+    ['trumpeter', 'Trumpeter', 77, [588, 324, 21, 31, 21, 24, 15],
+      { expel: 'null', death: 'null', curse: 'null', nerve: 'null', mind: 'null' },
+      ['holyMelody', 'maragidyne', 'mabufudyne', 'maziodyne', 'mazandyne'],
+      [['makakaja', 78], ['dekaja', 79], ['megidolaon', 80], ['evilMelody', 81]]],
+    ['dante', 'Dante', 80, [612, 306, 25, 22, 22, 25, 16],
+      {
+        physical: 'resist', fire: 'resist', ice: 'resist', electricity: 'resist', force: 'resist',
+        expel: 'null', death: 'null', curse: 'null', nerve: 'null', mind: 'null',
+      },
+      ['eAndI', 'rebellion', 'neverYield', 'provoke', 'holyStar', 'intimidate', 'roundtrip', 'whirlwind'],
+      [['bulletTime', 81], ['stinger', 82], ['sonsOath', 83], ['showtime', 84]]],
+  ];
+  const statKeys = ['hp', 'mp', 'strength', 'magic', 'vitality', 'agility', 'luck'];
+
+  expected.forEach(([id, name, level, stats, affinities, innate, future]) => {
+    const demon = NOCTURNE_GAME.data.demons[id];
+    assert(demon.name === name && demon.race === 'Fiend', `${name} should have the supplied identity`);
+    assert(demon.baseLevel === level, `${name} should have the supplied base level`);
+    assert(statKeys.every((key, index) => demon.baseStats[key] === stats[index]), `${name} should have the supplied base stats`);
+    assert(Object.entries(affinities).every(([type, value]) => demon.affinities[type] === value), `${name} should have the supplied affinities`);
+    assert(JSON.stringify(demon.innateSkills) === JSON.stringify(innate), `${name} should have the supplied innate skills`);
+    assert(
+      JSON.stringify(demon.futureSkills.map(({ skillId, level: learnLevel }) => [skillId, learnLevel])) === JSON.stringify(future),
+      `${name} should have the supplied future skill levels`,
+    );
+    assert(NOCTURNE_GAME.data.playerRoster.includes(id), `${name} should be selectable by the player`);
+  });
+});
+
 test('Nocturne clamps selected levels and unlocks future skills at their learn level', () => {
   const leveledGame = defineGame({
     ...NOCTURNE_GAME,
