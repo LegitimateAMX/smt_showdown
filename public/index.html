@@ -205,9 +205,22 @@
       </section>
     </main>
 
-    <div class="modal-backdrop is-open" id="setup-modal" role="dialog" aria-modal="true" aria-labelledby="setup-title">
+    <div class="modal-backdrop is-open" id="setup-modal" role="dialog" aria-modal="true" aria-labelledby="game-select-title">
       <div class="setup-modal">
         <div class="modal-decoration" aria-hidden="true"><i></i><i></i><i></i></div>
+        <section class="game-select-screen" id="game-select-screen">
+          <div class="setup-copy">
+            <span class="eyebrow">Demon summoning program</span>
+            <h1 id="game-select-title">Choose your game</h1>
+            <p>Select the title whose battle rules, demons, and compendium you want to use.</p>
+          </div>
+          <div class="game-options" id="game-options" aria-label="Available games"></div>
+        </section>
+
+        <section class="battle-setup-screen" id="battle-setup-screen" hidden>
+        <button class="change-game-button" id="change-game" type="button">
+          <span aria-hidden="true">&larr;</span> Choose another game
+        </button>
         <div class="setup-copy">
           <span class="eyebrow">Demon summoning program</span>
           <h1 id="setup-title">Open a local contract</h1>
@@ -246,6 +259,7 @@
           <span aria-hidden="true">→</span>
         </button>
         <p class="keyboard-hint">Tip: press <kbd>1</kbd>–<kbd>4</kbd> to use skills during battle.</p>
+        </section>
       </div>
     </div>
 

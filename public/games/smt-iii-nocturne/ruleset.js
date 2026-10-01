@@ -10,6 +10,14 @@ const PRESS_OUTCOME_PRIORITY = {
   catastrophic: 3,
 };
 
+const ZERO_PHYSICAL_EVASION_AILMENTS = new Set(['sleep', 'freeze', 'shock']);
+const TEMPORARY_AILMENTS = new Set(['freeze', 'shock']);
+const FLY_REDUCED_STATS = new Set(['strength', 'magic', 'vitality', 'luck', 'attack', 'defense']);
+const STONE_REDUCED_DAMAGE_ELEMENTS = new Set(['fire', 'ice', 'electricity']);
+const ALMIGHTY_PHYSICAL_SKILL_IDS = new Set([
+  'lastResort', 'kamikaze', 'sacrifice', 'freikugel', 'stinger', 'tekisatsu',
+]);
+
 /**
  * Nocturne's Press Turn action economy and title-specific damage formulas,
  * currently operating on temporary prototype combatant and skill data.
@@ -21,11 +29,16 @@ export class NocturneRuleset extends PrototypeRuleset {
       player: { full: this.livingFromState(state, 'player').length, half: 0 },
       enemy: { full: 0, half: 0 },
     };
+    state.actionSequence = 0;
     return state;
   }
 
   livingFromState(state, side) {
-    return state.teams[side].filter((member) => !member.fainted);
+    return state.teams[side].filter((member) => !member.fainted && !member.fled);
+  }
+
+  living(side) {
+    return this.livingFromState(this.state, side);
   }
 
   makeCombatant(selection) {
@@ -73,6 +86,7 @@ export class NocturneRuleset extends PrototypeRuleset {
       ailment: null,
       guarding: false,
       fainted: false,
+      fled: false,
     };
   }
 
@@ -102,22 +116,14 @@ export class NocturneRuleset extends PrototypeRuleset {
     const actor = this.active(side);
     const actorIndex = this.state.active[side];
 
-    if (actor.ailment?.type === 'sleep') {
-      actor.ailment.turns -= 1;
-      if (actor.ailment.turns <= 0 || this.engine.random() < 0.38) {
-        actor.ailment = null;
-        this.addEvent('status', `${actor.name} woke up!`, {
-          side, targetSide: side, targetIndex: actorIndex, tone: 'positive', impact: 'WAKE',
-        });
-      } else {
-        actor.guarding = false;
-        this.addEvent('status', `${actor.name} is fast asleep.`, {
-          side, targetSide: side, targetIndex: actorIndex, tone: 'negative', impact: 'ASLEEP',
-        });
-        this.finishAction(side, 'normal');
-        this.applyEndActionAilments(actor, side);
-        return this.engine.resultSince(eventStart);
-      }
+    const statusResult = actor.statusActionSequence === this.state.actionSequence
+      ? { handled: false }
+      : this.resolveStartOfActionStatus(side, actor, actorIndex);
+    actor.statusActionSequence = this.state.actionSequence;
+    if (statusResult.handled) {
+      actor.guarding = false;
+      if (!this.state.winner) this.finishAction(side, statusResult.outcome || 'normal');
+      return this.engine.resultSince(eventStart);
     }
 
     if (action.type === 'skill') {
@@ -127,6 +133,9 @@ export class NocturneRuleset extends PrototypeRuleset {
       }
       if (skill.implemented === false) {
         return { ok: false, error: `${skill.name} battle mechanics have not been implemented yet.`, events: [] };
+      }
+      if (actor.ailment?.type === 'mute' && skill.id !== 'attack') {
+        return { ok: false, error: `${actor.name} is muted and cannot use skills.`, events: [] };
       }
       if (!this.canPay(actor, skill)) {
         return { ok: false, error: `Not enough ${skill.costType.toUpperCase()}.`, events: [] };
@@ -144,15 +153,29 @@ export class NocturneRuleset extends PrototypeRuleset {
       if (skill.kind === 'buff') this.resolveStage(side, actor, target, skill);
       if (skill.kind === 'debuff') this.resolveStage(side, actor, target, skill);
       if (skill.kind === 'ailment') this.resolveAilment(side, actor, target, skill);
-      this.applyEndActionAilments(actor, side);
       this.finishAction(side, outcome);
     } else if (action.type === 'pass') {
       actor.guarding = false;
       this.addEvent('pass', `${actor.name} passed the turn.`, {
         side, targetSide: side, targetIndex: actorIndex, tone: 'system', impact: 'PASS',
       });
-      this.applyEndActionAilments(actor, side);
       this.finishAction(side, 'pass');
+    } else if (action.type === 'summon') {
+      const summonIndex = Number(action.index);
+      const summoned = this.state.teams[side][summonIndex];
+      if (!summoned || summoned.fainted || !summoned.fled) {
+        return { ok: false, error: 'That unit cannot be resummoned.', events: [] };
+      }
+      actor.guarding = false;
+      summoned.fled = false;
+      this.addEvent('summon', `${actor.name} resummoned ${summoned.name} from stock.`, {
+        side,
+        targetSide: side,
+        targetIndex: summonIndex,
+        tone: 'positive',
+        impact: 'SUMMON',
+      });
+      this.finishAction(side, 'normal');
     } else if (action.type === 'switch') {
       return { ok: false, error: 'All party members are already active.', events: [] };
     } else {
@@ -172,13 +195,187 @@ export class NocturneRuleset extends PrototypeRuleset {
     if (skill.target === 'self') return actor;
     if (Number.isInteger(action.targetIndex)) {
       const selected = this.state.teams[targetSide][action.targetIndex];
-      return selected && !selected.fainted ? selected : null;
+      return selected && !selected.fainted && !selected.fled ? selected : null;
     }
     return targetSide === side ? actor : this.active(targetSide);
   }
 
+  resolveStartOfActionStatus(side, actor, actorIndex) {
+    const type = actor.ailment?.type;
+    if (!type) return { handled: false };
+
+    if (type === 'poison') {
+      const damage = Math.max(1, Math.floor(actor.stats.maxHp * this.config.poisonPercent));
+      actor.hp = Math.max(0, actor.hp - damage);
+      this.addEvent('status', `${actor.name} lost ${damage} HP to Poison.`, {
+        side, targetSide: side, targetIndex: actorIndex, tone: 'negative', impact: 'POISON', amount: damage,
+      });
+      this.checkFaint(side, otherSide(side), actor);
+      return { handled: actor.fainted };
+    }
+
+    if (type === 'sleep') {
+      const hpRestored = Math.min(Math.max(1, Math.floor(actor.stats.maxHp * 0.1)), actor.stats.maxHp - actor.hp);
+      const mpRestored = Math.min(Math.max(1, Math.floor(actor.stats.maxMp * 0.1)), actor.stats.maxMp - actor.mp);
+      actor.hp += hpRestored;
+      actor.mp += mpRestored;
+      this.addEvent('status', `${actor.name} restored ${hpRestored} HP and ${mpRestored} MP while sleeping.`, {
+        side, targetSide: side, targetIndex: actorIndex, tone: 'positive', impact: 'REST',
+        hpRestored, mpRestored,
+      });
+      if (this.tryNaturalRecovery(actor, side, actorIndex, 100)) return { handled: false };
+      this.addEvent('status', `${actor.name} is fast asleep and cannot act.`, {
+        side, targetSide: side, targetIndex: actorIndex, tone: 'negative', impact: 'ASLEEP',
+      });
+      return { handled: true };
+    }
+
+    if (type === 'freeze' || type === 'shock') {
+      this.addEvent('status', `${actor.name} is ${type === 'freeze' ? 'frozen' : 'shocked'} and cannot act.`, {
+        side, targetSide: side, targetIndex: actorIndex, tone: 'negative', impact: type.toUpperCase(),
+      });
+      return { handled: true };
+    }
+
+    if (type === 'stone') {
+      this.addEvent('status', `${actor.name} is petrified and cannot act.`, {
+        side, targetSide: side, targetIndex: actorIndex, tone: 'negative', impact: 'STONE',
+      });
+      return { handled: true };
+    }
+
+    if (type === 'charm') {
+      if (this.tryNaturalRecovery(actor, side, actorIndex, 200)) return { handled: false };
+      return { handled: true, outcome: this.resolveCharmAction(side, actor, actorIndex) };
+    }
+
+    if (type === 'bind') {
+      if (this.tryNaturalRecovery(actor, side, actorIndex, 150)) return { handled: false };
+      this.addEvent('status', `${actor.name} is bound and cannot act.`, {
+        side, targetSide: side, targetIndex: actorIndex, tone: 'negative', impact: 'BOUND',
+      });
+      return { handled: true };
+    }
+
+    if (type === 'panic') {
+      if (this.tryNaturalRecovery(actor, side, actorIndex, 150)) return { handled: false };
+      if (this.engine.random() >= 0.5) return { handled: false };
+      this.resolvePanicAction(side, actor, actorIndex);
+      return { handled: true };
+    }
+
+    return { handled: false };
+  }
+
+  naturalRecoveryChance(actor, factor) {
+    return clamp(factor * this.effectiveStat(actor, 'luck') / (20 + actor.level), 0, 100);
+  }
+
+  tryNaturalRecovery(actor, side, actorIndex, factor) {
+    const chance = this.naturalRecoveryChance(actor, factor);
+    if (this.engine.random() * 100 >= chance) return false;
+    const label = this.ailmentLabel(actor.ailment.type);
+    actor.ailment = null;
+    this.addEvent('status', `${actor.name} naturally recovered from ${label}.`, {
+      side, targetSide: side, targetIndex: actorIndex, tone: 'positive', impact: 'RECOVER', chance,
+    });
+    return true;
+  }
+
+  resolveCharmAction(side, actor, actorIndex) {
+    const choice = Math.floor(this.engine.random() * 3);
+    if (choice === 0) {
+      const allies = this.living(side).filter((member) => member !== actor);
+      if (!allies.length) {
+        this.addEvent('status', `${actor.name} is charmed, but has no ally to attack.`, {
+          side, targetSide: side, targetIndex: actorIndex, tone: 'negative', impact: 'CHARMED',
+        });
+        return 'normal';
+      }
+      const target = allies[Math.floor(this.engine.random() * allies.length)];
+      this.addEvent('status', `${actor.name} is charmed and turns on ${target.name}!`, {
+        side, targetSide: side, targetIndex: this.state.teams[side].indexOf(target), tone: 'negative', impact: 'CHARMED',
+      });
+      return this.resolveDamage(side, actor, side, target, this.skills.attack);
+    }
+
+    if (choice === 1) {
+      const supportSkills = actor.skills
+        .map((id) => this.skills[id])
+        .filter((skill) => skill
+          && ['heal', 'buff'].includes(skill.kind)
+          && skill.implemented !== false
+          && this.canPay(actor, skill));
+      const targets = this.living(otherSide(side));
+      if (!supportSkills.length || !targets.length) {
+        this.addEvent('status', `${actor.name} is charmed and tries to aid the enemy, but cannot.`, {
+          side, targetSide: side, targetIndex: actorIndex, tone: 'negative', impact: 'CHARMED',
+        });
+        return 'normal';
+      }
+      const skill = supportSkills[Math.floor(this.engine.random() * supportSkills.length)];
+      const target = targets[Math.floor(this.engine.random() * targets.length)];
+      const targetSide = otherSide(side);
+      this.addEvent('status', `${actor.name} is charmed and aids ${target.name}!`, {
+        side, targetSide, targetIndex: this.state.teams[targetSide].indexOf(target), tone: 'negative', impact: 'CHARMED',
+      });
+      this.payCost(actor, skill);
+      if (skill.kind === 'heal') this.resolveHealTarget(side, actor, targetSide, target, skill);
+      else this.resolveStage(side, actor, target, skill);
+      return 'normal';
+    }
+
+    this.addEvent('status', `${actor.name} is charmed and does nothing.`, {
+      side, targetSide: side, targetIndex: actorIndex, tone: 'negative', impact: 'CHARMED',
+    });
+    return 'normal';
+  }
+
+  resolvePanicAction(side, actor, actorIndex) {
+    const choice = Math.floor(this.engine.random() * 3);
+    if (choice === 0) {
+      this.addEvent('status', `${actor.name} panicked and threw away money!`, {
+        side, targetSide: side, targetIndex: actorIndex, tone: 'negative', impact: 'MONEY LOST',
+      });
+      return;
+    }
+    if (choice === 1) {
+      this.addEvent('status', `${actor.name} stood dumbfounded in panic.`, {
+        side, targetSide: side, targetIndex: actorIndex, tone: 'negative', impact: 'PANIC',
+      });
+      return;
+    }
+
+    if (this.living(side).length <= 1) {
+      this.addEvent('status', `${actor.name} tried to flee in panic, but no ally remained on the field.`, {
+        side, targetSide: side, targetIndex: actorIndex, tone: 'negative', impact: 'PANIC',
+      });
+      return;
+    }
+    actor.fled = true;
+    this.addEvent('switch', `${actor.name} fled the active party and returned to stock!`, {
+      side, targetSide: side, targetIndex: actorIndex, tone: 'negative', impact: 'FLED',
+    });
+  }
+
+  applyAilment(target, type, targetSide, sourceSide) {
+    const ailment = { type };
+    if (TEMPORARY_AILMENTS.has(type)) ailment.expiresAfterSide = sourceSide;
+    target.ailment = ailment;
+    return ailment;
+  }
+
+  effectiveStat(combatant, stat) {
+    if (combatant.ailment?.type === 'fly' && FLY_REDUCED_STATS.has(stat)) return 1;
+    return combatant.stats[stat];
+  }
+
+  canUseCounter(combatant) {
+    return !combatant.fainted && !combatant.fled && combatant.ailment?.type !== 'stun';
+  }
+
   resolveHealTarget(side, actor, targetSide, target, skill) {
-    const amount = Math.max(1, Math.round(skill.power + actor.stats.magic * 0.72 + this.engine.random() * 6));
+    const amount = Math.max(1, Math.round(skill.power + this.effectiveStat(actor, 'magic') * 0.72 + this.engine.random() * 6));
     const restored = Math.min(amount, target.stats.maxHp - target.hp);
     target.hp += restored;
     this.addEvent('heal', `${actor.name} used ${skill.name}. ${target.name} restored ${restored} HP.`, {
@@ -207,7 +404,7 @@ export class NocturneRuleset extends PrototypeRuleset {
   }
 
   resolveAilment(side, actor, target, skill) {
-    const targetSide = otherSide(side);
+    const targetSide = this.state.teams[side].includes(target) ? side : otherSide(side);
     const targetIndex = this.state.teams[targetSide].indexOf(target);
     if (target.ailment) {
       this.addEvent('status', `${actor.name} used ${skill.name}, but ${target.name} is already afflicted.`, {
@@ -215,35 +412,23 @@ export class NocturneRuleset extends PrototypeRuleset {
       });
       return;
     }
-    const chance = clamp(skill.accuracy + (actor.stats.luck - target.stats.luck) * 1.2, 35, 92);
+    let chance = clamp(
+      skill.accuracy + (this.effectiveStat(actor, 'luck') - this.effectiveStat(target, 'luck')) * 1.2,
+      35,
+      92,
+    );
+    if (actor.ailment?.type === 'stun') chance *= 0.75;
     if (this.engine.random() * 100 < chance) {
-      target.ailment = { type: skill.ailment, turns: 2 + Math.floor(this.engine.random() * 2) };
-      this.addEvent('status', `${actor.name} used ${skill.name}. ${target.name} fell asleep!`, {
-        side, targetSide, targetIndex, tone: 'positive', impact: 'SLEEP',
+      this.applyAilment(target, skill.ailment, targetSide, side);
+      const label = this.ailmentLabel(skill.ailment);
+      this.addEvent('status', `${actor.name} used ${skill.name}. ${target.name} was afflicted with ${label}!`, {
+        side, targetSide, targetIndex, tone: 'positive', impact: label.toUpperCase(),
       });
     } else {
       this.addEvent('miss', `${actor.name} used ${skill.name}, but it failed.`, {
         side, targetSide, targetIndex, tone: 'negative', impact: 'MISS',
       });
     }
-  }
-
-  applyEndActionAilments(actor, side) {
-    if (actor.fainted || actor.ailment?.type !== 'poison') return;
-    const targetIndex = this.state.teams[side].indexOf(actor);
-    const damage = Math.max(1, Math.floor(actor.stats.maxHp * this.config.poisonPercent));
-    actor.hp = Math.max(0, actor.hp - damage);
-    actor.ailment.turns -= 1;
-    this.addEvent('status', `${actor.name} took ${damage} poison damage.`, {
-      side, targetSide: side, targetIndex, tone: 'negative', impact: 'POISON', amount: damage,
-    });
-    if (actor.ailment.turns <= 0 && actor.hp > 0) {
-      actor.ailment = null;
-      this.addEvent('status', `${actor.name} recovered from Poison.`, {
-        side, targetSide: side, targetIndex, tone: 'positive',
-      });
-    }
-    this.checkFaint(side, otherSide(side), actor);
   }
 
   resolveDamage(side, actor, targetSide, target, skill) {
@@ -317,8 +502,8 @@ export class NocturneRuleset extends PrototypeRuleset {
     const targetIndex = this.state.teams[targetSide].indexOf(target);
     const hitLabel = hit.total > 1 ? ` [${hit.number}/${hit.total}]` : '';
     const hitDetails = { hitNumber: hit.number, hitCount: hit.total };
-    const accuracyStage = this.stageMultiplier(actor.stages.agility) / this.stageMultiplier(target.stages.agility);
-    const hitChance = clamp(skill.accuracy * accuracyStage, 55, 100);
+    const physicalAttack = this.isPhysicalAttack(skill);
+    const hitChance = this.hitChanceFor(actor, target, skill);
     if (this.engine.random() * 100 >= hitChance) {
       this.addEvent('miss', `${actor.name} used ${skill.name}${hitLabel}, but missed ${target.name}!`, {
         side, tone: 'negative', impact: 'MISS', targetSide, targetIndex, ...hitDetails,
@@ -326,7 +511,34 @@ export class NocturneRuleset extends PrototypeRuleset {
       return 'penalty';
     }
 
-    const affinity = this.affinityFor(target, skill.element);
+    if (target.ailment?.type === 'stone' && (physicalAttack || skill.element === 'force')) {
+      const damage = target.hp;
+      target.hp = 0;
+      target.ailment = null;
+      this.addEvent('damage', `${actor.name} used ${skill.name}${hitLabel}. ${target.name} shattered!`, {
+        side,
+        tone: 'positive',
+        impact: 'SHATTER',
+        amount: damage,
+        affinity: 'normal',
+        critical: false,
+        targetSide,
+        targetIndex,
+        ...hitDetails,
+      });
+      this.checkFaint(targetSide, otherSide(targetSide), target);
+      return 'normal';
+    }
+
+    let affinity = this.affinityFor(target, skill.element);
+    if (target.ailment?.type === 'freeze'
+      && physicalAttack
+      && ['null', 'repel', 'drain'].includes(affinity)) {
+      affinity = 'normal';
+    }
+    if (target.ailment?.type === 'stone' && STONE_REDUCED_DAMAGE_ELEMENTS.has(skill.element)) {
+      affinity = 'normal';
+    }
     const damageFormula = this.damageFormulaFor(skill);
     const variance = this.damageVarianceFor(damageFormula);
     let damage = this.baseDamageFor(side, actor, skill);
@@ -334,7 +546,10 @@ export class NocturneRuleset extends PrototypeRuleset {
 
     damage *= this.stageMultiplier(actor.stages.attack);
     damage /= this.stageMultiplier(target.stages.defense);
-    if (damageFormula !== 'magic' && skill.crit && this.engine.random() * 100 < skill.crit) {
+    if (physicalAttack && actor.ailment?.type === 'poison') damage *= 0.5;
+    if (actor.ailment?.type === 'fly') damage *= 0.1;
+    const criticalChance = this.criticalChanceFor(target, skill);
+    if (criticalChance > 0 && this.engine.random() * 100 < criticalChance) {
       critical = true;
       damage *= this.config.criticalDamage;
     }
@@ -361,7 +576,7 @@ export class NocturneRuleset extends PrototypeRuleset {
         targetIndex: this.state.teams[side].indexOf(actor),
         ...hitDetails,
       });
-      this.checkFaint(side, targetSide, actor);
+      this.checkFaint(side, otherSide(side), actor);
       return 'catastrophic';
     }
     if (affinity === 'drain') {
@@ -371,6 +586,11 @@ export class NocturneRuleset extends PrototypeRuleset {
         side: targetSide, tone: 'positive', impact: 'DRAIN', amount: restored, targetSide, targetIndex, ...hitDetails,
       });
       return 'catastrophic';
+    }
+
+    if (target.ailment?.type === 'fly') damage = Math.max(1, Math.round(damage * 2));
+    if (target.ailment?.type === 'stone' && STONE_REDUCED_DAMAGE_ELEMENTS.has(skill.element)) {
+      damage = Math.max(1, Math.round(damage * 0.1));
     }
 
     target.hp = Math.max(0, target.hp - damage);
@@ -398,7 +618,7 @@ export class NocturneRuleset extends PrototypeRuleset {
     }
 
     if (skill.ailment && target.hp > 0 && !target.ailment && this.engine.random() * 100 < skill.ailmentChance) {
-      target.ailment = { type: skill.ailment, turns: 3 };
+      this.applyAilment(target, skill.ailment, targetSide, side);
       this.addEvent('status', `${target.name} was afflicted with ${this.ailmentLabel(skill.ailment)}!`, {
         side: targetSide,
         targetSide,
@@ -408,8 +628,29 @@ export class NocturneRuleset extends PrototypeRuleset {
       });
     }
 
-    this.checkFaint(targetSide, side, target);
+    this.checkFaint(targetSide, otherSide(targetSide), target);
     return affinity === 'weak' || critical ? 'bonus' : 'normal';
+  }
+
+  isPhysicalAttack(skill) {
+    return this.damageFormulaFor(skill) !== 'magic';
+  }
+
+  hitChanceFor(actor, target, skill) {
+    const accuracyStage = this.stageMultiplier(actor.stages.agility) / this.stageMultiplier(target.stages.agility);
+    let hitChance = clamp(skill.accuracy * accuracyStage, 55, 100);
+    if (actor.ailment?.type === 'stun') hitChance *= 0.75;
+    if (this.isPhysicalAttack(skill) && ZERO_PHYSICAL_EVASION_AILMENTS.has(target.ailment?.type)) {
+      return 100;
+    }
+    return clamp(hitChance, 0, 100);
+  }
+
+  criticalChanceFor(target, skill) {
+    if (!this.isPhysicalAttack(skill)) return 0;
+    if (ZERO_PHYSICAL_EVASION_AILMENTS.has(target.ailment?.type)) return 100;
+    if (target.ailment?.type === 'bind') return 60;
+    return skill.crit || 0;
   }
 
   damageFormulaFor(skill) {
@@ -417,6 +658,7 @@ export class NocturneRuleset extends PrototypeRuleset {
       return skill.damageFormula;
     }
     if (skill.id === 'attack') return 'basic';
+    if (ALMIGHTY_PHYSICAL_SKILL_IDS.has(skill.id)) return 'physical';
     if (skill.element === 'physical') return 'physical';
     return 'magic';
   }
@@ -430,7 +672,7 @@ export class NocturneRuleset extends PrototypeRuleset {
   baseDamageFor(side, actor, skill) {
     const formula = this.damageFormulaFor(skill);
     const level = actor.level;
-    const strength = actor.stats.strength ?? actor.stats.attack;
+    const strength = this.effectiveStat(actor, 'strength') ?? this.effectiveStat(actor, 'attack');
 
     if (formula === 'basic') {
       return (level + strength) * 2 * 1.33 * 0.8;
@@ -439,7 +681,7 @@ export class NocturneRuleset extends PrototypeRuleset {
       return ((level + strength) * 2 * skill.power / 23.2) * 0.8;
     }
     if (formula === 'weapon') {
-      const vitality = actor.stats.vitality ?? actor.stats.defense;
+      const vitality = this.effectiveStat(actor, 'vitality') ?? this.effectiveStat(actor, 'defense');
       const maximumHp = side === 'player'
         ? actor.stats.maxHp
         : Math.min((level + vitality) * 6, 999);
@@ -450,7 +692,7 @@ export class NocturneRuleset extends PrototypeRuleset {
     const limit = Number.isFinite(skill.limit) ? skill.limit : Number.POSITIVE_INFINITY;
     const effectiveLimit = Math.min(complement + level * skill.power * 2 / 21, limit);
     const damageLevel = Math.min(level, 160);
-    const magic = actor.stats.magic;
+    const magic = this.effectiveStat(actor, 'magic');
     return (
       effectiveLimit
       + effectiveLimit / 100 * (magic - (damageLevel / 5 + 4)) * 2.5
@@ -460,13 +702,25 @@ export class NocturneRuleset extends PrototypeRuleset {
   checkFaint(side, victorSide, combatant = this.active(side)) {
     if (combatant.hp > 0 || combatant.fainted) return;
     combatant.fainted = true;
+    combatant.fled = false;
+    combatant.ailment = null;
     combatant.hp = 0;
     const targetIndex = this.state.teams[side].indexOf(combatant);
     this.addEvent('faint', `${combatant.name} can no longer battle.`, {
       side, targetSide: side, targetIndex, tone: 'negative', impact: 'DOWN',
     });
 
-    const reserveIndex = this.state.teams[side].findIndex((member) => !member.fainted);
+    let reserveIndex = this.state.teams[side].findIndex((member) => !member.fainted && !member.fled);
+    if (reserveIndex === -1) {
+      reserveIndex = this.state.teams[side].findIndex((member) => !member.fainted);
+      if (reserveIndex !== -1) {
+        const returned = this.state.teams[side][reserveIndex];
+        returned.fled = false;
+        this.addEvent('summon', `${returned.name} was automatically resummoned because no ally remained on the field.`, {
+          side, targetSide: side, targetIndex: reserveIndex, tone: 'system', impact: 'SUMMON',
+        });
+      }
+    }
     if (reserveIndex === -1) {
       this.state.winner = victorSide;
       this.state.phase = 'ended';
@@ -485,15 +739,20 @@ export class NocturneRuleset extends PrototypeRuleset {
   }
 
   chooseAiAction() {
+    const fledIndex = this.state.teams.enemy.findIndex((member) => !member.fainted && member.fled);
+    if (fledIndex !== -1) return { type: 'summon', index: fledIndex };
+    if (this.active('enemy').ailment?.type === 'mute') return { type: 'skill', skillId: 'attack' };
+
     const action = super.chooseAiAction();
     if (action.type !== 'skill') return action;
 
     const skill = this.skills[action.skillId];
+    if (skill?.implemented === false) return { type: 'skill', skillId: 'attack' };
     if (!skill || skill.target === 'all' || skill.target === 'self') return action;
     const targetSide = this.targetSideForSkill('enemy', skill);
     const candidates = this.state.teams[targetSide]
       .map((member, index) => ({ member, index }))
-      .filter(({ member }) => !member.fainted);
+      .filter(({ member }) => !member.fainted && !member.fled);
     if (!candidates.length) return action;
 
     if (skill.kind === 'heal') {
@@ -521,6 +780,7 @@ export class NocturneRuleset extends PrototypeRuleset {
   finishAction(side, outcome) {
     if (this.state.winner) return;
 
+    this.state.actionSequence += 1;
     const normalizedOutcome = typeof outcome === 'string' ? outcome : outcome ? 'bonus' : 'normal';
     this.consumeIcons(side, normalizedOutcome);
     this.advanceActor(side);
@@ -590,7 +850,7 @@ export class NocturneRuleset extends PrototypeRuleset {
     const current = this.state.active[side];
     for (let offset = 1; offset <= team.length; offset += 1) {
       const index = (current + offset) % team.length;
-      if (!team[index].fainted) {
+      if (!team[index].fainted && !team[index].fled) {
         this.state.active[side] = index;
         return;
       }
@@ -599,9 +859,10 @@ export class NocturneRuleset extends PrototypeRuleset {
 
   beginTurn(side) {
     const previousSide = otherSide(side);
+    this.clearTemporaryAilmentsAfter(previousSide);
     this.state.pressTurns[previousSide] = { full: 0, half: 0 };
     this.state.pressTurns[side] = { full: this.living(side).length, half: 0 };
-    this.state.active[side] = this.state.teams[side].findIndex((member) => !member.fainted);
+    this.state.active[side] = this.state.teams[side].findIndex((member) => !member.fainted && !member.fled);
     this.state.phase = side;
 
     if (side === 'player') this.state.round += 1;
@@ -610,5 +871,28 @@ export class NocturneRuleset extends PrototypeRuleset {
     this.addEvent('turn', `${label} begins with ${count} Press Turn ${count === 1 ? 'icon' : 'icons'}.`, {
       side, tone: 'turn',
     });
+  }
+
+  clearTemporaryAilmentsAfter(completedSide) {
+    ['player', 'enemy'].forEach((ownerSide) => {
+      this.state.teams[ownerSide].forEach((member, targetIndex) => {
+        if (!TEMPORARY_AILMENTS.has(member.ailment?.type)) return;
+        const expiresAfterSide = member.ailment.expiresAfterSide ?? otherSide(ownerSide);
+        if (expiresAfterSide !== completedSide) return;
+        const label = this.ailmentLabel(member.ailment.type);
+        member.ailment = null;
+        this.addEvent('status', `${member.name} recovered from ${label} at the end of the opposing turn.`, {
+          side: ownerSide,
+          targetSide: ownerSide,
+          targetIndex,
+          tone: 'positive',
+          impact: 'RECOVER',
+        });
+      });
+    });
+  }
+
+  ailmentLabel(type) {
+    return type ? `${type.charAt(0).toUpperCase()}${type.slice(1)}` : 'Ailment';
   }
 }

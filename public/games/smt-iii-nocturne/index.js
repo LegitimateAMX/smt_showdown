@@ -6,7 +6,7 @@ import {
   NOCTURNE_ELEMENTS,
 } from './data/combat-types.js';
 import { NOCTURNE_DEMONS } from './data/demons.js';
-import { NOCTURNE_SKILLS } from './data/skills.js';
+import { NOCTURNE_SKILL_CATEGORIES, NOCTURNE_SKILLS } from './data/skills.js';
 import {
   NOCTURNE_DEFAULT_PLAYER_TEAM,
   NOCTURNE_OPPONENT_PRESETS,
@@ -111,10 +111,12 @@ export const SMT_III_NOCTURNE_GAME = defineGame({
     maxLevel: 255,
     statCap: 40,
     maxSkills: 8,
+    poisonPercent: 1 / 8,
   },
   data: {
     demons: NOCTURNE_DEMONS,
     skills: NOCTURNE_SKILLS,
+    skillCategories: NOCTURNE_SKILL_CATEGORIES,
     playerRoster: NOCTURNE_PLAYER_ROSTER,
     defaultPlayerTeam: NOCTURNE_DEFAULT_PLAYER_TEAM,
     opponentPresets: NOCTURNE_OPPONENT_PRESETS,
@@ -171,5 +173,6 @@ export {
   NOCTURNE_DAMAGE_TYPES,
   NOCTURNE_DEMONS,
   NOCTURNE_ELEMENTS,
+  NOCTURNE_SKILL_CATEGORIES,
   NOCTURNE_SKILLS,
 };

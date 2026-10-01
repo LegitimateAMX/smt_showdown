@@ -86,6 +86,65 @@ test('Nocturne exposes its title-specific incoming skill types', () => {
   assert(GAME.elements.gun && GAME.elements.electric && GAME.elements.light && GAME.elements.dark, 'Prototype 00 types should remain unchanged');
 });
 
+test('Nocturne exposes its ordered skill category taxonomy', () => {
+  const categories = NOCTURNE_GAME.data.skillCategories;
+  assert(
+    JSON.stringify(categories.map(({ name }) => name))
+      === JSON.stringify(['Physical Skills', 'Magic Skills', 'Passive Skills', 'Conversation Skills']),
+    'top-level skill categories should use the supplied order',
+  );
+  assert(
+    JSON.stringify(categories[0].subcategories.map(({ name }) => name))
+      === JSON.stringify([
+        'Thrust Skills', 'Needle Skills', 'Claw Skills', 'Bite Skills',
+        'Weapon Skills', 'Exclusive Physical Skills', 'Almighty Physical Skills',
+      ]),
+    'physical skill subcategories should use the supplied order',
+  );
+  assert(
+    JSON.stringify(categories[1].subcategories.map(({ name }) => name))
+      === JSON.stringify([
+        'Healing Skills', 'Fire Skills', 'Ice Skills', 'Electric Skills',
+        'Force Skills', 'Almighty Skills', 'Expel Skills', 'Death Skills',
+        'Curse Skills', 'Nerve Skills', 'Mind Skills', 'Miscellaneous Skills',
+      ]),
+    'magic skill subcategories should use the supplied order',
+  );
+  assert(
+    JSON.stringify(categories[1].subcategories.at(-1).subcategories.map(({ name }) => name))
+      === JSON.stringify(['Support Skills', 'Buff Skills', 'Debuff Skills', 'Canceler Skills', 'Shield Skills']),
+    'miscellaneous magic subcategories should use the supplied order',
+  );
+  assert(
+    JSON.stringify(categories[2].subcategories.map(({ name }) => name))
+      === JSON.stringify([
+        'Attack Affinity Passives', 'Status Enhancement Passives',
+        'Booster Passives', 'Miscellaneous Passives',
+      ]),
+    'passive skill subcategories should use the supplied order',
+  );
+  assert(
+    JSON.stringify(categories[3].subcategories.map(({ name }) => name))
+      === JSON.stringify([
+        'Recruit Skills', 'Trade Skills', 'Interruption Skills', 'Passive Conversational Skills',
+      ]),
+    'conversation skill subcategories should use the supplied order',
+  );
+  const categorizedSkillIds = categories.flatMap((category) => category.subcategories.flatMap(
+    (subcategory) => [
+      ...Object.keys(subcategory.skills || {}),
+      ...(subcategory.subcategories || []).flatMap(({ skills }) => Object.keys(skills)),
+    ],
+  ));
+  assert(categorizedSkillIds.length === 292, 'every Nocturne skill should live in the taxonomy');
+  assert(new Set(categorizedSkillIds).size === categorizedSkillIds.length, 'a skill should appear in only one category');
+  assert(
+    Object.keys(NOCTURNE_GAME.data.skills).length === categorizedSkillIds.length,
+    'the flat skill lookup should be derived entirely from categorized records',
+  );
+  assert(Object.isFrozen(categories), 'the skill taxonomy should be immutable at runtime');
+});
+
 test('Nocturne starts with one full Press Turn icon per living ally', () => {
   const battle = makeNocturneBattle();
   assert(battle.state.pressTurns.player.full === 3, 'player should begin with three full icons');
@@ -134,6 +193,288 @@ test('Nocturne selects and calculates all four damage formula classes', () => {
   battle.random = () => 1;
   assertNear(battle.rules.damageVarianceFor('physical'), 1.05, 'physical maximum variance');
   assertNear(battle.rules.damageVarianceFor('magic'), 1.1, 'magic maximum variance');
+});
+
+test('Nocturne Poison ticks at action start and halves physical attack damage', () => {
+  const clean = makeNocturneBattle();
+  clean.active('enemy').affinities.physical = 'normal';
+  clean.random = () => 0.5;
+  const cleanResult = clean.act('player', { type: 'skill', skillId: 'attack', targetIndex: 0 });
+  const cleanDamage = cleanResult.events.find((event) => event.type === 'damage').amount;
+
+  const poisoned = makeNocturneBattle();
+  const actor = poisoned.active('player');
+  poisoned.active('enemy').affinities.physical = 'normal';
+  actor.ailment = { type: 'poison' };
+  const startingHp = actor.hp;
+  poisoned.random = () => 0.5;
+  const result = poisoned.act('player', { type: 'skill', skillId: 'attack', targetIndex: 0 });
+  const poisonDamage = result.events.find((event) => event.type === 'damage').amount;
+
+  assert(startingHp - actor.hp === Math.max(1, Math.floor(actor.stats.maxHp / 8)), 'Poison should remove one eighth of maximum HP');
+  assert(poisonDamage <= Math.ceil(cleanDamage / 2), 'Poison should halve outgoing physical damage');
+  assert(actor.ailment?.type === 'poison', 'Poison should persist until explicitly cured');
+});
+
+test('Nocturne Sleep restores resources, wastes actions, recovers by Luck, and breaks on damage', () => {
+  const sleeping = makeNocturneBattle();
+  const actor = sleeping.active('player');
+  actor.hp -= 20;
+  actor.mp -= 10;
+  actor.ailment = { type: 'sleep' };
+  const startingHp = actor.hp;
+  const startingMp = actor.mp;
+  sleeping.random = () => 0.999;
+  sleeping.act('player', { type: 'pass' });
+
+  assert(actor.hp - startingHp === Math.floor(actor.stats.maxHp * 0.1), 'Sleep should restore ten percent maximum HP');
+  assert(actor.mp - startingMp === Math.floor(actor.stats.maxMp * 0.1), 'Sleep should restore ten percent maximum MP');
+  assert(sleeping.state.pressTurns.player.full === 2 && sleeping.state.pressTurns.player.half === 0, 'Sleep should waste one full action');
+  assertNear(
+    sleeping.rules.naturalRecoveryChance(actor, 100),
+    100 * actor.stats.luck / (20 + actor.level),
+    'Sleep natural recovery chance',
+  );
+
+  const struck = makeNocturneBattle();
+  const target = struck.active('enemy');
+  target.ailment = { type: 'sleep' };
+  struck.random = () => 0.999;
+  const result = struck.act('player', { type: 'skill', skillId: 'attack', targetIndex: 0 });
+  const damage = result.events.find((event) => event.type === 'damage');
+  assert(damage?.critical, 'physical attacks against Sleep should always hit critically');
+  assert(!target.ailment, 'a damaging attack should wake a sleeping target');
+
+  const recovering = makeNocturneBattle();
+  const recoveringActor = recovering.active('player');
+  recoveringActor.ailment = { type: 'sleep' };
+  recovering.random = () => 0;
+  recovering.act('player', { type: 'pass' });
+  assert(!recoveringActor.ailment, 'a successful Sleep recovery roll should clear the condition');
+  assert(recovering.state.pressTurns.player.half === 1, 'a naturally awakened unit should execute its chosen action');
+});
+
+test('Nocturne Freeze and Shock guarantee physical criticals and expire after the opposing turn', () => {
+  const frozen = makeNocturneBattle();
+  const frozenTarget = frozen.active('enemy');
+  frozenTarget.affinities.physical = 'repel';
+  frozenTarget.ailment = { type: 'freeze', expiresAfterSide: 'player' };
+  frozen.random = () => 0.999;
+  const frozenResult = frozen.act('player', { type: 'skill', skillId: 'attack', targetIndex: 0 });
+  assert(frozenResult.events.some((event) => event.type === 'damage' && event.critical), 'Freeze should guarantee a physical critical');
+  assert(!frozenResult.events.some((event) => event.type === 'repel'), 'Freeze should bypass physical Repel');
+  frozen.rules.beginTurn('enemy');
+  assert(!frozenTarget.ailment, 'Freeze should clear when the attacking side ends its turn');
+
+  const shocked = makeNocturneBattle();
+  const shockedTarget = shocked.active('enemy');
+  shockedTarget.affinities.physical = 'repel';
+  shockedTarget.ailment = { type: 'shock', expiresAfterSide: 'player' };
+  assert(
+    shocked.rules.criticalChanceFor(shockedTarget, NOCTURNE_GAME.data.skills.attack) === 100,
+    'Shock should guarantee physical criticals',
+  );
+  shocked.random = () => 0.999;
+  const shockedResult = shocked.act('player', { type: 'skill', skillId: 'attack', targetIndex: 0 });
+  assert(shockedResult.events.some((event) => event.type === 'repel'), 'Shock should not bypass physical affinities');
+  shocked.rules.beginTurn('enemy');
+  assert(!shockedTarget.ailment, 'Shock should clear when the attacking side ends its turn');
+
+  ['freeze', 'shock'].forEach((type) => {
+    const disabled = makeNocturneBattle();
+    disabled.active('player').ailment = { type, expiresAfterSide: 'enemy' };
+    disabled.act('player', { type: 'pass' });
+    assert(
+      disabled.state.pressTurns.player.full === 2 && disabled.state.pressTurns.player.half === 0,
+      `${type} should prevent action until the opposing turn ends`,
+    );
+  });
+});
+
+test('Nocturne Mute blocks active skills while Stun reduces accuracy and suppresses counters', () => {
+  const muted = makeNocturneBattle();
+  const mutedActor = muted.active('player');
+  mutedActor.ailment = { type: 'mute' };
+  const blocked = muted.act('player', { type: 'skill', skillId: 'zio', targetIndex: 0 });
+  assert(!blocked.ok && blocked.error.includes('muted'), 'Mute should reject non-basic skill use');
+  assert(muted.rules.canUseCounter(mutedActor), 'Mute should not suppress passive counter eligibility');
+  const basic = muted.act('player', { type: 'skill', skillId: 'attack', targetIndex: 0 });
+  assert(basic.ok, 'Mute should still allow the regular Attack command');
+
+  const stunned = makeNocturneBattle();
+  const stunnedActor = stunned.active('player');
+  stunnedActor.ailment = { type: 'stun' };
+  stunned.random = () => 0.8;
+  const result = stunned.act('player', { type: 'skill', skillId: 'attack', targetIndex: 0 });
+  assert(result.events.some((event) => event.type === 'miss'), 'Stun should reduce a 96% attack to 72% accuracy');
+  assert(!stunned.rules.canUseCounter(stunnedActor), 'Stun should prevent counter activation');
+});
+
+test('Nocturne Stone reduces elemental damage and shatters under Physical or Force attacks', () => {
+  const clean = makeNocturneBattle();
+  clean.active('enemy').affinities.electricity = 'normal';
+  clean.random = () => 0.5;
+  const cleanResult = clean.act('player', { type: 'skill', skillId: 'zio', targetIndex: 0 });
+  const cleanDamage = cleanResult.events.find((event) => event.type === 'damage').amount;
+
+  const stoned = makeNocturneBattle();
+  const stonedTarget = stoned.active('enemy');
+  stonedTarget.affinities.electricity = 'normal';
+  stonedTarget.ailment = { type: 'stone' };
+  stoned.random = () => 0.5;
+  const stonedResult = stoned.act('player', { type: 'skill', skillId: 'zio', targetIndex: 0 });
+  const stonedDamage = stonedResult.events.find((event) => event.type === 'damage').amount;
+  assert(stonedDamage === Math.max(1, Math.round(cleanDamage * 0.1)), 'Stone should reduce Fire, Ice, and Electric damage to ten percent');
+
+  const immobile = makeNocturneBattle();
+  immobile.active('player').ailment = { type: 'stone' };
+  immobile.act('player', { type: 'pass' });
+  assert(immobile.state.pressTurns.player.full === 2 && immobile.state.pressTurns.player.half === 0, 'Stone should waste the afflicted unit action');
+
+  const shattered = makeNocturneBattle();
+  const shatteredTarget = shattered.active('enemy');
+  shatteredTarget.ailment = { type: 'stone' };
+  shattered.random = () => 0.5;
+  const shatterResult = shattered.act('player', { type: 'skill', skillId: 'attack', targetIndex: 0 });
+  assert(shatteredTarget.fainted && shatteredTarget.hp === 0, 'a landed physical attack should instantly shatter Stone');
+  assert(shatterResult.events.some((event) => event.impact === 'SHATTER'), 'Stone shattering should be reported');
+
+  const forceShattered = makeNocturneBattle();
+  const forceActor = forceShattered.active('player');
+  const forceTarget = forceShattered.active('enemy');
+  forceActor.skills.push('zan');
+  forceTarget.ailment = { type: 'stone' };
+  forceShattered.random = () => 0.5;
+  forceShattered.act('player', { type: 'skill', skillId: 'zan', targetIndex: 0 });
+  assert(forceTarget.fainted && forceTarget.hp === 0, 'a landed Force attack should instantly shatter Stone');
+});
+
+test('Nocturne Fly reduces stats and outgoing damage while doubling incoming damage', () => {
+  const statCheck = makeNocturneBattle();
+  const flyActor = statCheck.active('player');
+  flyActor.ailment = { type: 'fly' };
+  assert(statCheck.rules.effectiveStat(flyActor, 'strength') === 1, 'Fly should reduce Strength to one');
+  assert(statCheck.rules.effectiveStat(flyActor, 'magic') === 1, 'Fly should reduce Magic to one');
+  assert(statCheck.rules.effectiveStat(flyActor, 'vitality') === 1, 'Fly should reduce Vitality to one');
+  assert(statCheck.rules.effectiveStat(flyActor, 'luck') === 1, 'Fly should reduce Luck to one');
+  assert(statCheck.rules.effectiveStat(flyActor, 'agility') === flyActor.stats.agility, 'Fly should preserve Agility');
+
+  const cleanOutgoing = makeNocturneBattle();
+  cleanOutgoing.active('enemy').affinities.physical = 'normal';
+  cleanOutgoing.random = () => 0.5;
+  const cleanOutgoingDamage = cleanOutgoing.act('player', { type: 'skill', skillId: 'attack', targetIndex: 0 })
+    .events.find((event) => event.type === 'damage').amount;
+  const flyOutgoing = makeNocturneBattle();
+  flyOutgoing.active('enemy').affinities.physical = 'normal';
+  flyOutgoing.active('player').ailment = { type: 'fly' };
+  flyOutgoing.random = () => 0.5;
+  const flyOutgoingDamage = flyOutgoing.act('player', { type: 'skill', skillId: 'attack', targetIndex: 0 })
+    .events.find((event) => event.type === 'damage').amount;
+  assert(flyOutgoingDamage <= Math.ceil(cleanOutgoingDamage * 0.1), 'Fly attacks should deal at most ten percent normal damage before its stat loss');
+
+  const cleanIncoming = makeNocturneBattle();
+  cleanIncoming.active('enemy').affinities.physical = 'normal';
+  cleanIncoming.random = () => 0.5;
+  const cleanIncomingDamage = cleanIncoming.act('player', { type: 'skill', skillId: 'attack', targetIndex: 0 })
+    .events.find((event) => event.type === 'damage').amount;
+  const flyIncoming = makeNocturneBattle();
+  flyIncoming.active('enemy').affinities.physical = 'normal';
+  flyIncoming.active('enemy').ailment = { type: 'fly' };
+  flyIncoming.random = () => 0.5;
+  const flyIncomingDamage = flyIncoming.act('player', { type: 'skill', skillId: 'attack', targetIndex: 0 })
+    .events.find((event) => event.type === 'damage').amount;
+  assert(flyIncomingDamage === cleanIncomingDamage * 2, 'Fly should double incoming damage');
+});
+
+test('Nocturne Charm forces hostile, supportive, or wasted actions and uses Luck recovery', () => {
+  const hostile = makeNocturneBattle();
+  const actor = hostile.active('player');
+  const ally = hostile.state.teams.player[1];
+  const allyHp = ally.hp;
+  actor.ailment = { type: 'charm' };
+  const hostileRolls = [0.999, 0, 0, 0.5, 0.5, 0.5];
+  hostile.random = () => hostileRolls.shift() ?? 0.5;
+  hostile.act('player', { type: 'pass' });
+  assert(ally.hp < allyHp, 'Charm should be able to force a regular attack against an ally');
+  assertNear(
+    hostile.rules.naturalRecoveryChance(actor, 200),
+    200 * actor.stats.luck / (20 + actor.level),
+    'Charm natural recovery chance',
+  );
+
+  const supportive = makeNocturneBattle();
+  const supportiveActor = supportive.active('player');
+  const enemy = supportive.active('enemy');
+  enemy.hp -= 20;
+  supportiveActor.ailment = { type: 'charm' };
+  const supportRolls = [0.999, 0.4, 0, 0, 0.5];
+  supportive.random = () => supportRolls.shift() ?? 0.5;
+  supportive.act('player', { type: 'pass' });
+  assert(enemy.hp === enemy.stats.maxHp, 'Charm should be able to force healing on an enemy');
+
+  const idle = makeNocturneBattle();
+  idle.active('player').ailment = { type: 'charm' };
+  const idleRolls = [0.999, 0.9];
+  idle.random = () => idleRolls.shift() ?? 0.5;
+  const idleResult = idle.act('player', { type: 'skill', skillId: 'attack', targetIndex: 0 });
+  assert(idleResult.events.some((event) => event.text.includes('does nothing')), 'Charm should be able to waste the action');
+});
+
+test('Nocturne Bind wastes actions, recovers by Luck, and gives physical attacks a 60% critical chance', () => {
+  const bound = makeNocturneBattle();
+  const actor = bound.active('player');
+  actor.ailment = { type: 'bind' };
+  bound.random = () => 0.999;
+  bound.act('player', { type: 'pass' });
+  assert(bound.state.pressTurns.player.full === 2 && bound.state.pressTurns.player.half === 0, 'Bind should waste one Press Turn');
+  assertNear(
+    bound.rules.naturalRecoveryChance(actor, 150),
+    150 * actor.stats.luck / (20 + actor.level),
+    'Bind natural recovery chance',
+  );
+
+  const struck = makeNocturneBattle();
+  struck.active('enemy').ailment = { type: 'bind' };
+  assert(
+    struck.rules.criticalChanceFor(struck.active('enemy'), NOCTURNE_GAME.data.skills.attack) === 60,
+    'Bind should set incoming physical critical chance to sixty percent',
+  );
+  struck.random = () => 0.5;
+  const result = struck.act('player', { type: 'skill', skillId: 'attack', targetIndex: 0 });
+  assert(result.events.some((event) => event.type === 'damage' && event.critical), 'a 50% critical roll should succeed against Bind');
+});
+
+test('Nocturne Panic supports money loss, dumbfounded turns, fleeing, recovery, and resummoning', () => {
+  const money = makeNocturneBattle();
+  const moneyActor = money.active('player');
+  moneyActor.ailment = { type: 'panic' };
+  const moneyRolls = [0.999, 0.1, 0.1];
+  money.random = () => moneyRolls.shift() ?? 0.5;
+  const moneyResult = money.act('player', { type: 'pass' });
+  assert(moneyResult.events.some((event) => event.text.includes('threw away money')), 'Panic should report the money-loss action');
+  assertNear(
+    money.rules.naturalRecoveryChance(moneyActor, 150),
+    150 * moneyActor.stats.luck / (20 + moneyActor.level),
+    'Panic natural recovery chance',
+  );
+
+  const dumbfounded = makeNocturneBattle();
+  dumbfounded.active('player').ailment = { type: 'panic' };
+  const dumbfoundedRolls = [0.999, 0.1, 0.5];
+  dumbfounded.random = () => dumbfoundedRolls.shift() ?? 0.5;
+  const dumbfoundedResult = dumbfounded.act('player', { type: 'pass' });
+  assert(dumbfoundedResult.events.some((event) => event.text.includes('dumbfounded')), 'Panic should report the dumbfounded action');
+
+  const fleeing = makeNocturneBattle();
+  const fleeingActor = fleeing.active('player');
+  fleeingActor.ailment = { type: 'panic' };
+  const fleeRolls = [0.999, 0.1, 0.9];
+  fleeing.random = () => fleeRolls.shift() ?? 0.5;
+  fleeing.act('player', { type: 'pass' });
+  assert(fleeingActor.fled && fleeing.living('player').length === 2, 'Panic fleeing should remove the unit from the active party');
+  assert(fleeing.state.active.player === 1, 'turn order should advance past a fled unit');
+  const summonResult = fleeing.act('player', { type: 'summon', index: 0 });
+  assert(summonResult.ok && !fleeingActor.fled, 'another unit should be able to resummon a fled ally');
 });
 
 test('Nocturne compendium records use the level-ready demon schema', () => {

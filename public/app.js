@@ -7,6 +7,9 @@ const delay = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
 
 const ui = {
   setupModal: $('#setup-modal'),
+  gameSelectScreen: $('#game-select-screen'),
+  battleSetupScreen: $('#battle-setup-screen'),
+  gameOptions: $('#game-options'),
   setupRoster: $('#setup-roster'),
   setupSkills: $('#setup-skills'),
   setupInstructions: $('#setup-instructions'),
@@ -130,6 +133,7 @@ function setup() {
     (game) => `<option value="${game.id}">${escapeHtml(game.name)} — ${escapeHtml(game.family)}</option>`,
   ).join('');
   ui.gameProfile.value = activeGame.id;
+  renderGameOptions();
   renderOpponentOptions();
   renderSetupRoster();
   renderCompendiumFilters();
@@ -139,6 +143,35 @@ function setup() {
   bindEvents();
   renderEmptyBattle();
   if (new URLSearchParams(window.location.search).has('demo')) startBattle();
+  else showGameSelection();
+}
+
+function renderGameOptions() {
+  ui.gameOptions.innerHTML = listGames().map((game) => `
+    <button class="game-choice" data-game-id="${game.id}" type="button">
+      <span class="game-choice__mark" aria-hidden="true">${escapeHtml(game.shortName.slice(0, 1))}</span>
+      <span class="game-choice__copy">
+        <small>${escapeHtml(game.family)}</small>
+        <strong>${escapeHtml(game.name)}</strong>
+        <span>${escapeHtml(game.description)}</span>
+      </span>
+      <span class="game-choice__action">Select game <i aria-hidden="true">&rarr;</i></span>
+    </button>
+  `).join('');
+}
+
+function showGameSelection() {
+  ui.gameSelectScreen.hidden = false;
+  ui.battleSetupScreen.hidden = true;
+  ui.setupModal.setAttribute('aria-labelledby', 'game-select-title');
+  window.setTimeout(() => $('[data-game-id]', ui.gameOptions)?.focus(), 50);
+}
+
+function showBattleSetup() {
+  ui.gameSelectScreen.hidden = true;
+  ui.battleSetupScreen.hidden = false;
+  ui.setupModal.setAttribute('aria-labelledby', 'setup-title');
+  window.setTimeout(() => $('[data-roster-id]', ui.setupRoster)?.focus(), 50);
 }
 
 function renderOpponentOptions() {
@@ -157,6 +190,7 @@ function activateGame(gameId) {
   PLAYER_ROSTER = activeGame.data.playerRoster;
   OPPONENT_PRESETS = activeGame.data.opponentPresets;
   RULES_PROFILE = activeGame.config;
+  ui.gameProfile.value = activeGame.id;
   selectedTeam = [...activeGame.data.defaultPlayerTeam];
   selectedLevels = createLevelSelections(activeGame);
   selectedSkillLoadouts = createSkillSelections(activeGame, selectedLevels);
@@ -278,6 +312,13 @@ function renderSetupSkillLoadouts() {
 
 function bindEvents() {
   ui.gameProfile.addEventListener('change', () => activateGame(ui.gameProfile.value));
+  ui.gameOptions.addEventListener('click', (event) => {
+    const choice = event.target.closest('[data-game-id]');
+    if (!choice) return;
+    activateGame(choice.dataset.gameId);
+    showBattleSetup();
+  });
+  $('#change-game').addEventListener('click', showGameSelection);
 
   ui.setupRoster.addEventListener('click', (event) => {
     const card = event.target.closest('[data-roster-id]');
@@ -346,10 +387,12 @@ function bindEvents() {
     const cancelTarget = event.target.closest('[data-action="cancel-target"]');
     const skillButton = event.target.closest('[data-skill-id]');
     const switchButton = event.target.closest('[data-switch-index]');
+    const summonButton = event.target.closest('[data-summon-index]');
     if (targetButton) choosePendingTarget(targetButton.dataset.targetSide, Number(targetButton.dataset.targetIndex));
     if (cancelTarget) cancelTargetSelection();
     if (skillButton) selectPlayerSkill(skillButton.dataset.skillId);
     if (switchButton) issuePlayerAction({ type: 'switch', index: Number(switchButton.dataset.switchIndex) });
+    if (summonButton) issuePlayerAction({ type: 'summon', index: Number(summonButton.dataset.summonIndex) });
     if (event.target.closest('[data-action="guard"]')) issuePlayerAction({ type: 'guard' });
     if (event.target.closest('[data-action="pass"]')) issuePlayerAction({ type: 'pass' });
     if (event.target.closest('[data-action="rematch"]')) startBattle();
@@ -417,7 +460,7 @@ function openSetup() {
   ui.setupModal.classList.add('is-open');
   ui.setupModal.removeAttribute('aria-hidden');
   renderSetupRoster();
-  window.setTimeout(() => $('[data-roster-id]', ui.setupRoster)?.focus(), 50);
+  showBattleSetup();
 }
 
 function startBattle() {
@@ -513,12 +556,12 @@ function renderFieldParty(side) {
   const fieldParty = $(`#${side}-field-party`);
   fieldParty.style.setProperty('--party-size', state.teams[side].length);
   fieldParty.innerHTML = state.teams[side].map((combatant, index) => {
-    const acting = state.phase === side && state.active[side] === index && !combatant.fainted;
-    const targetable = targetSide === side && !combatant.fainted && !interactionLocked;
-    const status = combatant.fainted ? 'Down' : acting ? 'Acting' : targetable ? 'Select target' : 'Ready';
+    const acting = state.phase === side && state.active[side] === index && !combatant.fainted && !combatant.fled;
+    const targetable = targetSide === side && !combatant.fainted && !combatant.fled && !interactionLocked;
+    const status = combatant.fainted ? 'Down' : combatant.fled ? 'In stock' : acting ? 'Acting' : targetable ? 'Select target' : 'Ready';
     return `
       <button
-        class="field-unit${acting ? ' is-acting' : ''}${targetable ? ' is-targetable' : ''}${combatant.fainted ? ' is-fainted' : ''}"
+        class="field-unit${acting ? ' is-acting' : ''}${targetable ? ' is-targetable' : ''}${combatant.fainted ? ' is-fainted' : ''}${combatant.fled ? ' is-fled' : ''}"
         id="${side}-field-unit-${index}"
         data-field-side="${side}"
         data-field-index="${index}"
@@ -541,8 +584,12 @@ function renderFieldParty(side) {
 
 function renderConditions(combatant) {
   const chips = [];
+  if (combatant.fled) chips.push('<span class="condition condition--clear">Stock</span>');
   if (combatant.guarding) chips.push('<span class="condition condition--guard">Guard</span>');
-  if (combatant.ailment) chips.push(`<span class="condition condition--ailment">${escapeHtml(combatant.ailment.type)}</span>`);
+  if (combatant.ailment) {
+    const label = `${combatant.ailment.type.charAt(0).toUpperCase()}${combatant.ailment.type.slice(1)}`;
+    chips.push(`<span class="condition condition--ailment">${escapeHtml(label)}</span>`);
+  }
   Object.entries(combatant.stages).forEach(([stat, stage]) => {
     if (stage) chips.push(`<span class="condition ${stage > 0 ? 'condition--up' : 'condition--down'}">${stat.slice(0, 3)} ${stage > 0 ? '+' : ''}${stage}</span>`);
   });
@@ -554,9 +601,9 @@ function renderParty() {
   const usesTurnOrder = activeGame.presentation.partyMode === 'turn-order';
   $('#player-party-list').innerHTML = state.teams.player.map((member, index) => {
     const active = state.active.player === index;
-    const stateLabel = member.fainted ? 'Down' : usesTurnOrder ? active ? 'Acting' : 'Ready' : active ? 'Active' : 'Reserve';
+    const stateLabel = member.fainted ? 'Down' : member.fled ? 'In stock' : usesTurnOrder ? active ? 'Acting' : 'Ready' : active ? 'Active' : 'Reserve';
     return `
-      <button class="party-member${active ? ' is-active' : ''}${member.fainted ? ' is-fainted' : ''}" type="button" ${member.fainted ? 'disabled' : ''}>
+      <button class="party-member${active ? ' is-active' : ''}${member.fainted ? ' is-fainted' : ''}${member.fled ? ' is-fled' : ''}" type="button" ${member.fainted ? 'disabled' : ''}>
         <span class="mini-sigil" style="--c1:${member.palette[0]};--c2:${member.palette[1]}">${member.glyph}</span>
         <span class="party-member__body">
           <span><strong>${escapeHtml(member.name)}</strong><small>${stateLabel}</small></span>
@@ -621,6 +668,9 @@ function renderCommands() {
   const state = engine.state;
   const actor = engine.active('player');
   const disabled = interactionLocked || state.phase !== 'player';
+  const fledMembers = state.teams.player
+    .map((member, index) => ({ member, index }))
+    .filter(({ member }) => member.fled && !member.fainted);
 
   if (state.winner) {
     ui.commandContent.innerHTML = `
@@ -668,6 +718,12 @@ function renderCommands() {
             <span><strong>Pass</strong><small>Move to the next ally using half a turn</small></span>
             <span class="skill-cost">Half turn</span>
           </button>` : ''}
+        ${fledMembers.map(({ member, index }) => `
+          <button class="guard-button" data-summon-index="${index}" type="button" ${disabled ? 'disabled' : ''}>
+            <span class="skill-icon element-support">&#10022;</span>
+            <span><strong>Resummon ${escapeHtml(member.name)}</strong><small>Return this unit from stock</small></span>
+            <span class="skill-cost">1 turn</span>
+          </button>`).join('')}
       </div>`;
   } else if (activeCommandTab === 'switch') {
     ui.commandContent.innerHTML = `
@@ -683,6 +739,7 @@ function renderCommands() {
 function renderSkillButton(actor, skill, index, disabled) {
   const payable = engine.canPay(actor, skill);
   const implemented = skill.implemented !== false;
+  const blockedByMute = actor.ailment?.type === 'mute';
   const element = ELEMENTS[skill.element];
   const target = engine.active('enemy');
   const affinity = skill.kind === 'damage' && !activeGame.presentation.manualTargeting
@@ -690,7 +747,7 @@ function renderSkillButton(actor, skill, index, disabled) {
     : null;
   const affinityTag = affinity && affinity !== 'normal' ? `<span class="affinity-hint affinity-${affinity}">${AFFINITIES[affinity].label}</span>` : '';
   return `
-    <button class="skill-button" data-skill-id="${skill.id}" type="button" ${disabled || !payable || !implemented ? 'disabled' : ''} style="--element:${element.color}">
+    <button class="skill-button" data-skill-id="${skill.id}" type="button" ${disabled || !payable || !implemented || blockedByMute ? 'disabled' : ''} style="--element:${element.color}">
       <span class="key-hint">${index + 1}</span>
       <span class="skill-icon element-${skill.element}">${element.icon}</span>
       <span class="skill-copy">
@@ -717,6 +774,10 @@ function selectPlayerSkill(skillId) {
   const actor = engine.active('player');
   const skill = SKILLS[skillId];
   if (!skill || (!actor.skills.includes(skill.id) && skill.id !== 'attack')) return;
+  if (actor.ailment?.type === 'mute' && skill.id !== 'attack') {
+    showToast(`${actor.name} is muted and cannot use skills.`);
+    return;
+  }
   if (skill.implemented === false) {
     showToast(`${skill.name} battle mechanics have not been implemented yet.`);
     return;
@@ -737,7 +798,7 @@ function selectPlayerSkill(skillId) {
 function choosePendingTarget(side, index) {
   if (!pendingAction || pendingAction.targetSide !== side || interactionLocked) return;
   const target = engine.state.teams[side]?.[index];
-  if (!target || target.fainted) return;
+  if (!target || target.fainted || target.fled) return;
   issuePlayerAction({ ...pendingAction, targetIndex: index });
 }
 
@@ -761,7 +822,7 @@ function renderTargetSelection() {
           const affinity = skill.kind === 'damage' ? engine.affinityFor(target, skill.element) : null;
           const affinityLabel = affinity ? AFFINITIES[affinity].label : `${target.hp} / ${target.stats.maxHp} HP`;
           return `
-            <button class="target-option" data-target-side="${pendingAction.targetSide}" data-target-index="${index}" type="button" ${target.fainted ? 'disabled' : ''}>
+            <button class="target-option" data-target-side="${pendingAction.targetSide}" data-target-index="${index}" type="button" ${target.fainted || target.fled ? 'disabled' : ''}>
               <span class="mini-sigil" style="--c1:${target.palette[0]};--c2:${target.palette[1]}">${target.glyph}</span>
               <span><strong>${escapeHtml(target.name)}</strong><small>${escapeHtml(affinityLabel)}</small></span>
             </button>`;
